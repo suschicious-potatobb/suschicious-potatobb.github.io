@@ -143,7 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
             titleKey: 'game_sushi_tap_title',
             descKey: 'game_sushi_tap_desc',
             tagKey: 'game_tag_action',
-            thumbnail: 'Web/games/sushi-tap/Assets/thumbnail.svg',
+            thumbnail: 'games/sushi-tap/Assets/thumbnail.svg',
             descLongKey: 'sushi_tap_desc_long',
             ruleKeys: ['sushi_tap_rule_1', 'sushi_tap_rule_2', 'sushi_tap_rule_3'],
             tipsKey: 'sushi_tap_tips'
@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
             titleKey: 'game_sushi_catch_title',
             descKey: 'game_sushi_catch_desc',
             tagKey: 'game_tag_catch',
-            thumbnail: 'Web/games/sushi-catch/Assets/thumbnail.svg',
+            thumbnail: 'games/sushi-catch/Assets/thumbnail.svg',
             descLongKey: 'sushi_catch_desc_long',
             ruleKeys: ['sushi_catch_rule_1', 'sushi_catch_rule_2', 'sushi_catch_rule_3'],
             tipsKey: 'sushi_catch_tips'
@@ -176,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
             titleKey: 'game_sushi_docking_title',
             descKey: 'game_sushi_docking_desc',
             tagKey: 'game_tag_puzzle',
-            thumbnail: 'Web/games/sushi-docking/Assets/thumbnail.svg',
+            thumbnail: 'games/sushi-docking/Assets/thumbnail.svg',
             descLongKey: 'sushi_docking_desc_long',
             ruleKeys: ['sushi_docking_rule_1', 'sushi_docking_rule_2', 'sushi_docking_rule_3'],
             tipsKey: 'sushi_docking_tips'
