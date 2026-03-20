@@ -139,44 +139,44 @@ document.addEventListener('DOMContentLoaded', () => {
     const games = [
         {
             id: 'sushi-tap',
-            sceneUrl: 'games/sushi-tap/Scenes/',
+            sceneUrl: 'Web/games/sushi-tap/Scenes/',
             titleKey: 'game_sushi_tap_title',
             descKey: 'game_sushi_tap_desc',
             tagKey: 'game_tag_action',
-            thumbnail: 'games/sushi-tap/Assets/thumbnail.svg',
+            thumbnail: 'Web/games/sushi-tap/Assets/thumbnail.svg',
             descLongKey: 'sushi_tap_desc_long',
             ruleKeys: ['sushi_tap_rule_1', 'sushi_tap_rule_2', 'sushi_tap_rule_3'],
             tipsKey: 'sushi_tap_tips'
         },
         {
             id: 'sushi-catch',
-            sceneUrl: 'games/sushi-catch/Scenes/',
+            sceneUrl: 'Web/games/sushi-catch/Scenes/',
             titleKey: 'game_sushi_catch_title',
             descKey: 'game_sushi_catch_desc',
             tagKey: 'game_tag_catch',
-            thumbnail: 'games/sushi-catch/Assets/thumbnail.svg',
+            thumbnail: 'Web/games/sushi-catch/Assets/thumbnail.svg',
             descLongKey: 'sushi_catch_desc_long',
             ruleKeys: ['sushi_catch_rule_1', 'sushi_catch_rule_2', 'sushi_catch_rule_3'],
             tipsKey: 'sushi_catch_tips'
         },
         {
             id: 'sushi-match',
-            sceneUrl: 'games/sushi-match/Scenes/',
+            sceneUrl: 'Web/games/sushi-match/Scenes/',
             titleKey: 'game_sushi_match_title',
             descKey: 'game_sushi_match_desc',
             tagKey: 'game_tag_puzzle',
-            thumbnail: 'games/sushi-match/Assets/thumbnail.svg',
+            thumbnail: 'Web/games/sushi-match/Assets/thumbnail.svg',
             descLongKey: 'sushi_match_desc_long',
             ruleKeys: ['sushi_match_rule_1', 'sushi_match_rule_2', 'sushi_match_rule_3'],
             tipsKey: 'sushi_match_tips'
         },
         {
             id: 'sushi-docking',
-            sceneUrl: 'games/sushi-docking/Scenes/',
+            sceneUrl: 'Web/games/sushi-docking/Scenes/',
             titleKey: 'game_sushi_docking_title',
             descKey: 'game_sushi_docking_desc',
             tagKey: 'game_tag_puzzle',
-            thumbnail: 'games/sushi-docking/Assets/thumbnail.svg',
+            thumbnail: 'Web/games/sushi-docking/Assets/thumbnail.svg',
             descLongKey: 'sushi_docking_desc_long',
             ruleKeys: ['sushi_docking_rule_1', 'sushi_docking_rule_2', 'sushi_docking_rule_3'],
             tipsKey: 'sushi_docking_tips'
@@ -189,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         games.forEach(game => {
             const gameCard = document.createElement('a');
-            gameCard.href = `game?id=${encodeURIComponent(game.id)}`;
+            gameCard.href = `Web/game?id=${encodeURIComponent(game.id)}`;
             gameCard.className = 'game-card';
 
             const title = translations[currentLang][game.titleKey];
