@@ -139,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const games = [
         {
             id: 'sushi-tap',
-            sceneUrl: 'Web/games/sushi-tap/Scenes/',
+            sceneUrl: 'games/sushi-tap/Scenes/',
             titleKey: 'game_sushi_tap_title',
             descKey: 'game_sushi_tap_desc',
             tagKey: 'game_tag_action',
@@ -150,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         {
             id: 'sushi-catch',
-            sceneUrl: 'Web/games/sushi-catch/Scenes/',
+            sceneUrl: 'games/sushi-catch/Scenes/',
             titleKey: 'game_sushi_catch_title',
             descKey: 'game_sushi_catch_desc',
             tagKey: 'game_tag_catch',
@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         {
             id: 'sushi-match',
-            sceneUrl: 'Web/games/sushi-match/Scenes/',
+            sceneUrl: 'games/sushi-match/Scenes/',
             titleKey: 'game_sushi_match_title',
             descKey: 'game_sushi_match_desc',
             tagKey: 'game_tag_puzzle',
@@ -172,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         {
             id: 'sushi-docking',
-            sceneUrl: 'Web/games/sushi-docking/Scenes/',
+            sceneUrl: 'games/sushi-docking/Scenes/',
             titleKey: 'game_sushi_docking_title',
             descKey: 'game_sushi_docking_desc',
             tagKey: 'game_tag_puzzle',
