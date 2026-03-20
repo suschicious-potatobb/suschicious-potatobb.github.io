@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game - Sushicious Games</title>
+    <meta name="description" content="Play a premium, mobile-optimized indie game in your browser. No installs, just play.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Noto+Serif+JP:wght@900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="Styles/site.css">
+</head>
+<body>
+    <header>
+        <a href="index.html" class="logo">Sushi<span>cious</span></a>
+        <div class="nav-links">
+            <a href="index.html#games" data-i18n="nav_games">Games</a>
+            <a href="trends.html" data-i18n="nav_trends">Trends</a>
+            <a href="contact.html" data-i18n="nav_contact">Contact</a>
+        </div>
+        <div class="nav-right">
+            <button id="lang-toggle" class="lang-toggle">JP / EN</button>
+        </div>
+    </header>
+    <main class="game-page" id="game-detail">
+        <a class="back-link" href="index.html#games" data-i18n="back_to_games">ゲーム一覧へ</a>
+        <h1 id="game-title">Game</h1>
+        <p id="game-short-desc" class="game-lead"></p>
+        <div class="game-embed">
+            <iframe id="game-iframe" title="Game" allowfullscreen></iframe>
+        </div>
+        <section class="game-section">
+            <h2 data-i18n="about_game">このゲームについて</h2>
+            <p id="game-long-desc"></p>
+        </section>
+        <section class="game-section">
+            <h2 data-i18n="how_to_play">遊び方</h2>
+            <ol id="game-rules"></ol>
+        </section>
+        <section class="game-section">
+            <h2 data-i18n="pro_tips">攻略のコツ</h2>
+            <p id="game-tips"></p>
+        </section>
+        <div class="ad-space">
+            <div class="ad-label" data-i18n="advertisement">Advertisement</div>
+            <div id="ad-placeholder">
+                <div class="affiliate-banner-wrapper"></div>
+            </div>
+        </div>
+    </main>
+    <footer>
+        <div class="footer-content">
+            <a href="index.html" class="logo">Sushi<span>cious</span></a>
+            <div class="footer-links">
+                <a href="terms.html" data-i18n="footer_terms">Terms</a>
+                <a href="privacy.html" data-i18n="footer_privacy">Privacy</a>
+                <a href="contact.html" data-i18n="footer_contact">Contact</a>
+            </div>
+        </div>
+        <p class="copyright">&copy; 2026 Sushicious Games. <span data-i18n="all_rights_reserved">All rights reserved.</span></p>
+    </footer>
+    <script src="Scripts/site.js"></script>
+</body>
+</html>

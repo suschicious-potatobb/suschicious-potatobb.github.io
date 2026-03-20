@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sushicious Games | Premium Indie Games</title>
+    
+    <!-- SEO & X (Twitter) OGP -->
+    <meta name="description" content="Explore our collection of premium, mobile-optimized indie games. No installs, just play.">
+    <meta property="og:title" content="Sushicious Games">
+    <meta property="og:description" content="Bite-sized Fun. Play premium indie games in your browser.">
+    <meta property="og:image" content="https://sushicious-games.web.app/og-image.jpg"> <!-- Replace with your actual OG image URL -->
+    <meta property="og:url" content="https://sushicious-games.web.app/">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@SushiciousGames"> <!-- Replace with your actual X handle -->
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Noto+Serif+JP:wght@900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="Styles/site.css">
+</head>
+<body>
+    <header>
+        <a href="index.html" class="logo">Sushi<span>cious</span></a>
+        <div class="nav-right">
+            <a href="https://twitter.com/intent/tweet?text=Play%20premium%20indie%20games%20on%20Sushicious%20Games!&url=https://sushicious-games.web.app/" target="_blank" class="x-share-btn">
+                <svg viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                <span>X</span>
+            </a>
+            <div class="nav-links">
+                <a href="#games" data-i18n="nav_games">Games</a>
+                <a href="trends.html" data-i18n="nav_trends">Trends</a>
+                <a href="contact.html" data-i18n="nav_contact">Contact</a>
+            </div>
+            <button id="lang-toggle" class="lang-toggle">JP / EN</button>
+        </div>
+    </header>
+
+    <section class="hero">
+        <h1 data-i18n="hero_title">Bite-sized Fun.</h1>
+        <p data-i18n="hero_subtitle">Explore our collection of premium, mobile-optimized indie games. No installs, just play.</p>
+    </section>
+
+    <section id="daily-trends-preview" class="trends-preview">
+        <div class="trends-card">
+            <h2 data-i18n="latest_trends_title">Today's Trends</h2>
+            <div id="trends-summary-container">
+                <p class="trends-summary">本日のトレンドは、ゲーム業界におけるAI活用が加速し、より没入感のある体験を提供する新たなゲームエンジンの登場が注目されています。AI業界では、創造的なコンテンツ生成におけるAIの能力が飛躍的に向上し、特にゲーム開発への応用が期待されています。寿司業界では、AIを活用したネタの鮮度管理システムが導入され、品質維持に貢献する動きが見られます。</p>
+            </div>
+            <a href="trends.html" class="btn-primary" data-i18n="view_all_trends">View All Trends</a>
+        </div>
+    </section>
+
+    <main id="games">
+        <h2 class="section-title" data-i18n="featured_games">Featured Games</h2>
+        <div id="game-list">
+            <!-- Dynamic Content -->
+        </div>
+
+        <div class="ad-space">
+            <div class="ad-label" data-i18n="advertisement">Advertisement</div>
+            <div id="ad-placeholder">
+                <div class="affiliate-banner-wrapper">
+                    <!-- Randomly loaded via script.js -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <a href="index.html" class="logo">Sushi<span>cious</span></a>
+            <div class="footer-links">
+                <a href="terms.html" data-i18n="footer_terms">Terms</a>
+                <a href="privacy.html" data-i18n="footer_privacy">Privacy</a>
+                <a href="contact.html" data-i18n="footer_contact">Contact</a>
+            </div>
+        </div>
+        <p class="copyright">&copy; 2026 Sushicious Games. <span data-i18n="all_rights_reserved">All rights reserved.</span></p>
+    </footer>
+
+    <script src="Scripts/site.js"></script>
+</body>
+</html>

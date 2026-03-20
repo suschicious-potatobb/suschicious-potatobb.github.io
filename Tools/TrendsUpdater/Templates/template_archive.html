@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sushicious Trends | {{DATE}} Archive</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Noto+Serif+JP:wght@900&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="../Styles/site.css">
+</head>
+<body>
+    <header>
+        <a href="../index.html" class="logo">Sushi<span>cious</span></a>
+        <div class="nav-right">
+            <div class="nav-links">
+                <a href="../index.html#games" data-i18n="nav_games">Games</a>
+                <a href="../trends.html" data-i18n="nav_trends">Trends</a>
+                <a href="../contact.html" data-i18n="nav_contact">Contact</a>
+            </div>
+            <button id="lang-toggle" class="lang-toggle">JP / EN</button>
+        </div>
+    </header>
+
+    <main id="trends-main">
+        <section class="hero">
+            <h1>Game & AI Trends Archive</h1>
+            <p>{{DATE}} のトレンド情報です。</p>
+        </section>
+
+        <div id="trends-container">
+            <article class="trend-article">
+                <h2>{{DATE}} のトレンド</h2>
+                <p class="summary">{{SUMMARY}}</p>
+                
+                <section class="trend-category">
+                    <h3>AI トレンド</h3>
+                    <ul>
+                        {{AI_LIST}}
+                    </ul>
+                </section>
+
+                <section class="trend-category">
+                    <h3>ゲーム トレンド</h3>
+                    <ul>
+                        {{GAME_LIST}}
+                    </ul>
+                </section>
+            </article>
+
+            <a href="../trends.html" class="btn-primary" style="margin-top: 2rem;">最新トレンドに戻る</a>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <a href="../index.html" class="logo">Sushi<span>cious</span></a>
+        </div>
+        <p class="copyright">&copy; 2026 Sushicious Games. All rights reserved.</p>
+    </footer>
+
+	<script src="../Scripts/site.js"></script>
+</body>
+</html>
