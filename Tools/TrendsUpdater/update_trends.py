@@ -112,7 +112,8 @@ def update_html(trends):
         archive_content = archive_content.replace("{{SUMMARY}}", trends['summary'])
         archive_content = archive_content.replace("{{AI_LIST}}", ai_list_html)
         archive_content = archive_content.replace("{{GAME_LIST}}", game_list_html)
-        
+        archive_content = archive_content.replace("{{SUSHI_LIST}}", sushi_list_html)
+
         with open(today_file, "w", encoding="utf-8") as f:
             f.write(archive_content)
         print(f"Created archive file: {today_file}")
@@ -147,6 +148,13 @@ def update_html(trends):
                     <ul>
 """
         for item in trends['game']:
+            latest_article_html += f"""                        <li>
+                            <h4>{item['title']}</h4>
+                            <p>{item['desc']}<br><a href="{item['url']}" target="_blank">参照元</a></p>
+                        </li>
+"""
+
+        for item in trends['sushi']:
             latest_article_html += f"""                        <li>
                             <h4>{item['title']}</h4>
                             <p>{item['desc']}<br><a href="{item['url']}" target="_blank">参照元</a></p>
