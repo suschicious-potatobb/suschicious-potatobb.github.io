@@ -173,7 +173,7 @@ def update_html(trends):
                 print(f"Successfully updated {trends_file} (kept only latest in main)")
 
     # 3. index.html の更新
-    index_file = "Web/index.html"
+    index_file = "index.html"
     if os.path.exists(index_file):
         with open(index_file, "r", encoding="utf-8") as f:
             index_content = f.read()
