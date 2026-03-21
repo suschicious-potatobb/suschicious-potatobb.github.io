@@ -154,16 +154,20 @@ def update_html(trends):
                         </li>
 """
 
+        latest_article_html += """                    </ul>
+                </section>
+
+                <section class="trend-category">
+                    <h3>寿司 トレンド</h3>
+                    <ul>
+"""
         for item in trends['sushi']:
             latest_article_html += f"""                        <li>
                             <h4>{item['title']}</h4>
                             <p>{item['desc']}<br><a href="{item['url']}" target="_blank">参照元</a></p>
                         </li>
 """
-        latest_article_html += """                    </ul>
-                </section>
-            </article>
-"""
+
         # trends-container の中身を最新のもの1件に置き換える（肥大化防止）
         container_start = '<div id="trends-container">'
         sidebar_start = '<aside class="archive">'
