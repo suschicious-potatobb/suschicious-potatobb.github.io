@@ -32,6 +32,7 @@ def get_latest_trends():
   "summary": "...",
   "ai": [{{ "title": "...", "desc": "...", "url": "..." }}],
   "game": [{{ "title": "...", "desc": "...", "url": "..." }}]
+  "sushi": [{{ "title": "...", "desc": "...", "url": "..." }}]
 }}
 """
 
@@ -98,11 +99,15 @@ def update_html(trends):
         ai_list_html = ""
         for item in trends['ai']:
             ai_list_html += f'<li><h4>{item["title"]}</h4><p>{item["desc"]}<br><a href="{item["url"]}" target="_blank">参照元</a></p></li>\n'
-            
+
         game_list_html = ""
         for item in trends['game']:
             game_list_html += f'<li><h4>{item["title"]}</h4><p>{item["desc"]}<br><a href="{item["url"]}" target="_blank">参照元</a></p></li>\n'
-            
+
+        sushi_list_html = ""
+        for item in trends['sushi']:
+            sushi_list_html += f'<li><h4>{item["title"]}</h4><p>{item["desc"]}<br><a href="{item["url"]}" target="_blank">参照元</a></p></li>\n'
+
         archive_content = template.replace("{{DATE}}", trends['date'])
         archive_content = archive_content.replace("{{SUMMARY}}", trends['summary'])
         archive_content = archive_content.replace("{{AI_LIST}}", ai_list_html)
