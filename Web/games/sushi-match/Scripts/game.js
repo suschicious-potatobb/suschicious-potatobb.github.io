@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-analytics.js";
+import { fetchGlobalRanking, saveGlobalScore, getRanking, resizeCanvas } from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
 const firebaseConfig = { 
@@ -16,6 +16,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const firebaseOps = { collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp };
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -56,49 +57,18 @@ let canvasWidth, canvasHeight;
 let score = 0;
 let timeLeft = 30;
 let gameState = 'start'; // 'start', 'playing', 'gameOver'
-let globalRanking = [];
-let isLoadingRanking = false;
+const rankingState = { globalRanking: [], isLoadingRanking: false };
 
+// --- Ranking Configuration ---
 const STORAGE_KEY_ALL_TIME = 'sushicious_match_all_time_rank';
+const STORAGE_KEY_DAILY = 'sushicious_daily_rank';
+const GLOBAL_COLLECTION = 'rankings_match';
 
 // --- Puzzle Logic ---
 const GRID_SIZE = 4;
 let cards = [];
 let selectedCards = [];
 const sushiEmojis = ['🍣', '🦐', '🍳', '🐙', '🥢', '🍵', '🍶', '🍱'];
-
-async function fetchGlobalRanking() {
-    if (isLoadingRanking) return;
-    isLoadingRanking = true;
-    try {
-        const q = query(collection(db, "rankings_match"), orderBy("score", "desc"), limit(3));
-        const querySnapshot = await getDocs(q);
-        globalRanking = querySnapshot.docs.map(doc => doc.data());
-    } catch (e) {
-        console.error("Error fetching ranking: ", e);
-    } finally {
-        isLoadingRanking = false;
-    }
-}
-
-async function saveGlobalScore(score) {
-    if (score <= 0) return;
-    try {
-        await addDoc(collection(db, "rankings_match"), {
-            score: score,
-            timestamp: serverTimestamp(),
-            userAgent: navigator.userAgent
-        });
-        fetchGlobalRanking();
-    } catch (e) {
-        console.error("Error adding document: ", e);
-    }
-}
-
-function getRanking(key) {
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : [];
-}
 
 function saveRanking(key, score) {
     let ranking = getRanking(key);
@@ -107,26 +77,14 @@ function saveRanking(key, score) {
     localStorage.setItem(key, JSON.stringify(ranking.slice(0, 3)));
     
     if (key === STORAGE_KEY_ALL_TIME) {
-        saveGlobalScore(score);
+        saveGlobalScore({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, score, topN: 3, state: rankingState });
     }
 }
 
-function resize() {
-    const viewWidth = document.documentElement.clientWidth;
-    const viewHeight = document.documentElement.clientHeight;
-    
-    canvasWidth = viewWidth;
-    canvasHeight = viewHeight;
-    
-    const maxAspectRatio = 9 / 16;
-    if (viewWidth / viewHeight > maxAspectRatio) {
-        canvasWidth = Math.floor(viewHeight * maxAspectRatio);
-    }
-    
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    canvas.style.width = canvasWidth + 'px';
-    canvas.style.height = canvasHeight + 'px';
+function applyResize() {
+    const size = resizeCanvas({ canvas });
+    canvasWidth = size.canvasWidth;
+    canvasHeight = size.canvasHeight;
 }
 
 function initGrid() {
@@ -162,18 +120,13 @@ function draw() {
     ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
 
     // Draw Grid
-    const padding = 20;
-    const cardSize = (canvasWidth - padding * (GRID_SIZE + 1)) / GRID_SIZE;
-    
-    // Calculate grid height to center it
-    const gridHeight = padding + (cardSize + padding) * GRID_SIZE;
-    const gridYStart = (canvasHeight - gridHeight) / 2 + 30;
+    const { padding, cardSize, gridYStart, cellStep } = getGridLayout();
 
     cards.forEach((card, i) => {
         const row = Math.floor(i / GRID_SIZE);
         const col = i % GRID_SIZE;
-        const x = padding + col * (cardSize + padding);
-        const y = gridYStart + row * (cardSize + padding);
+        const x = padding + col * cellStep;
+        const y = gridYStart + row * cellStep;
 
         ctx.fillStyle = card.isMatched ? 'rgba(255, 255, 255, 0.1)' : (card.isFlipped ? '#fff' : '#e63946');
         ctx.beginPath();
@@ -203,6 +156,15 @@ function draw() {
     }
 }
 
+function getGridLayout() {
+    const padding = 20;
+    const cardSize = (canvasWidth - padding * (GRID_SIZE + 1)) / GRID_SIZE;
+    const gridHeight = padding + (cardSize + padding) * GRID_SIZE;
+    const gridYStart = (canvasHeight - gridHeight) / 2 + 30;
+    const cellStep = cardSize + padding;
+    return { padding, cardSize, gridYStart, cellStep };
+}
+
 function drawOverlay(title, subtitle) {
     ctx.fillStyle = 'rgba(0,0,0,0.8)';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
@@ -216,7 +178,7 @@ function drawOverlay(title, subtitle) {
     ctx.font = '24px Inter, sans-serif';
     ctx.fillText(subtitle, canvasWidth/2, canvasHeight * 0.28);
 
-    if (isLoadingRanking) {
+    if (rankingState.isLoadingRanking) {
         ctx.font = '18px Inter, sans-serif';
         ctx.fillText(t('loading'), canvasWidth/2, canvasHeight * 0.8);
     } else {
@@ -232,7 +194,7 @@ function drawRankings() {
     
     ctx.font = '18px Inter, sans-serif';
     ctx.fillStyle = '#fff';
-    globalRanking.forEach((r, i) => {
+    rankingState.globalRanking.forEach((r, i) => {
         ctx.fillText(`${i+1}. ${r.score}${t('pts')}`, canvasWidth/2, y + 35 + i*30);
     });
 }
@@ -263,7 +225,7 @@ function gameLoop() {
 
 // --- Events ---
 window.addEventListener('resize', () => {
-    setTimeout(resize, 100);
+    setTimeout(applyResize, 100);
 });
 
 function handleCardClick(x, y) {
@@ -273,11 +235,20 @@ function handleCardClick(x, y) {
     }
     if (gameState !== 'playing' || selectedCards.length >= 2) return;
 
-    const padding = 20;
-    const cardSize = (canvasWidth - padding * (GRID_SIZE + 1)) / GRID_SIZE;
-    
-    const col = Math.floor((x - padding) / (cardSize + padding));
-    const row = Math.floor((y - padding - 60) / (cardSize + padding));
+    const { padding, cardSize, gridYStart, cellStep } = getGridLayout();
+
+    const localX = x - padding;
+    const localY = y - gridYStart;
+    if (localX < 0 || localY < 0) return;
+
+    const col = Math.floor(localX / cellStep);
+    const row = Math.floor(localY / cellStep);
+    if (col < 0 || col >= GRID_SIZE || row < 0 || row >= GRID_SIZE) return;
+
+    const withinCardX = (localX % cellStep) <= cardSize;
+    const withinCardY = (localY % cellStep) <= cardSize;
+    if (!withinCardX || !withinCardY) return;
+
     const index = row * GRID_SIZE + col;
 
     if (index >= 0 && index < cards.length && !cards[index].isFlipped && !cards[index].isMatched) {
@@ -311,7 +282,7 @@ canvas.addEventListener('mousedown', (e) => {
         score = 0;
         timeLeft = 30;
         initGrid();
-        fetchGlobalRanking();
+        fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
     } else {
         const rect = canvas.getBoundingClientRect();
         handleCardClick(e.clientX - rect.left, e.clientY - rect.top);
@@ -325,14 +296,14 @@ canvas.addEventListener('touchstart', (e) => {
         score = 0;
         timeLeft = 30;
         initGrid();
-        fetchGlobalRanking();
+        fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
     } else {
         const rect = canvas.getBoundingClientRect();
         handleCardClick(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
     }
 }, { passive: false });
 
-resize();
+applyResize();
 initGrid();
-fetchGlobalRanking();
+fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
 gameLoop();

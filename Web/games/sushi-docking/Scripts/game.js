@@ -1,30 +1,23 @@
-const FIREBASE_ENABLED = false;
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
-const _memoryStorage = new Map();
-const storage = {
-    getItem(key) {
-        try {
-            return localStorage.getItem(key);
-        } catch {
-            return _memoryStorage.has(key) ? _memoryStorage.get(key) : null;
-        }
-    },
-    setItem(key, value) {
-        const v = String(value);
-        try {
-            localStorage.setItem(key, v);
-        } catch {
-            _memoryStorage.set(key, v);
-        }
-    },
-    removeItem(key) {
-        try {
-            localStorage.removeItem(key);
-        } catch {
-            _memoryStorage.delete(key);
-        }
-    }
+// --- Firebase Configuration ---
+const firebaseConfig = {
+    apiKey: "AIzaSyDffNMWkocUzsvZkbX_sOXtk5NHr8-KQME",
+    authDomain: "sushicious-games.firebaseapp.com",
+    projectId: "sushicious-games",
+    storageBucket: "sushicious-games.firebasestorage.app",
+    messagingSenderId: "597158694276",
+    appId: "1:597158694276:web:c52ac21a53f9637d0d61d1",
+    measurementId: "G-3CY5YW1H20"
 };
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
 // --- Multilingual Support ---
 const translations = {
@@ -57,6 +50,8 @@ const translations = {
 let currentLang = storage.getItem('sushicious_lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en');
 const t = (key) => translations[currentLang]?.[key] || key;
 
+// --- Game Configuration ---
+let canvasWidth, canvasHeight;
 let score = 0;
 let gameState = 'start'; // 'start', 'playing', 'gameOver'
 let globalRanking = [];
@@ -71,16 +66,11 @@ async function fetchGlobalRanking() {
     if (isLoadingRanking) return;
     isLoadingRanking = true;
     try {
-        if (!FIREBASE_ENABLED) {
-            globalRanking = [];
-            return [];
-        }
-        globalRanking = [];
-        return globalRanking;
+        const q = query(collection(db, GLOBAL_COLLECTION), orderBy("score", "desc"), limit(3));
+        const querySnapshot = await getDocs(q);
+        globalRanking = querySnapshot.docs.map(doc => doc.data());
     } catch (e) {
         console.error("Error fetching ranking: ", e);
-        globalRanking = [];
-        return [];
     } finally {
         isLoadingRanking = false;
     }
@@ -89,22 +79,20 @@ async function fetchGlobalRanking() {
 async function saveGlobalScore(score) {
     if (score <= 0) return;
     try {
-        if (!FIREBASE_ENABLED) return;
+        await addDoc(collection(db, GLOBAL_COLLECTION), {
+            score: score,
+            timestamp: serverTimestamp(),
+            userAgent: navigator.userAgent
+        });
+        fetchGlobalRanking();
     } catch (e) {
         console.error("Error adding document: ", e);
     }
 }
 
 function getRanking(key) {
-    const data = storage.getItem(key);
-    if (!data) return [];
-    try {
-        const parsed = JSON.parse(data);
-        return Array.isArray(parsed) ? parsed : [];
-    } catch {
-        storage.removeItem(key);
-        return [];
-    }
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : [];
 }
 
 function saveRanking(key, score) {
@@ -113,23 +101,85 @@ function saveRanking(key, score) {
     
     // For daily rank, check if the data is from today
     if (key === STORAGE_KEY_DAILY) {
-        const lastDate = storage.getItem(key + '_date');
+        const lastDate = localStorage.getItem(key + '_date');
         if (lastDate !== today) {
             ranking = [];
-            storage.setItem(key + '_date', today);
+            localStorage.setItem(key + '_date', today);
         }
     }
 
     ranking.push({ score, date: today, timestamp: Date.now() });
     ranking.sort((a, b) => b.score - a.score);
     ranking = ranking.slice(0, 3); // Keep only top 3
-    storage.setItem(key, JSON.stringify(ranking));
+    localStorage.setItem(key, JSON.stringify(ranking));
     
     // Also save to Firebase if it's high enough (simplified: always send to Firebase)
     if (key === STORAGE_KEY_ALL_TIME) {
         saveGlobalScore(score);
     }
 }
+
+function resize() {
+    const viewWidth = document.documentElement.clientWidth;
+    const viewHeight = document.documentElement.clientHeight;
+    
+    canvasWidth = viewWidth;
+    canvasHeight = viewHeight;
+    
+    const maxAspectRatio = 9 / 16;
+    if (viewWidth / viewHeight > maxAspectRatio) {
+        canvasWidth = Math.floor(viewHeight * maxAspectRatio);
+    }
+    
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    canvas.style.width = canvasWidth + 'px';
+    canvas.style.height = canvasHeight + 'px';
+}
+
+function drawRankList(title, list, yStart, isGlobal = false) {
+    ctx.fillStyle = '#f0f0f0';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(title, canvasWidth / 2, yStart);
+    
+    ctx.font = 'bold 18px monospace';
+    if (isGlobal && isLoadingRanking && list.length === 0) {
+        ctx.fillStyle = '#999';
+        ctx.fillText(t('loading'), canvasWidth / 2, yStart + 35);
+    } else if (list.length === 0) {
+        ctx.fillStyle = '#666';
+        ctx.fillText('-', canvasWidth / 2, yStart + 35);
+    } else {
+        list.forEach((item, i) => {
+            ctx.fillStyle = i === 0 ? '#ffd700' : (i === 1 ? '#e0e0e0' : (i === 2 ? '#cd7f32' : '#ffffff'));
+            ctx.fillText(`${i + 1}. ${item.score} ${t('pts')}`, canvasWidth / 2, yStart + 35 + (i * 28));
+        });
+    }
+}
+
+function drawStartScreen() {
+    ctx.fillStyle = '#0f0f0f';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    
+    // Draw Border
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
+    
+    ctx.fillStyle = '#ff3e3e';
+    ctx.font = 'bold 44px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(t('game_title'), canvasWidth / 2, canvasHeight * 0.15);
+    
+    // World Ranking from Firebase
+    drawRankList(t('community_top'), globalRanking, canvasHeight * 0.35, true);
+
+    ctx.fillStyle = `rgba(240, 240, 240, ${0.7 + Math.sin(Date.now() / 300) * 0.3})`;
+    ctx.font = '22px sans-serif';
+    ctx.fillText(t('tap_to_start'), canvasWidth / 2, canvasHeight * 0.85);
+}
+
 (() => {
     const GAME_WIDTH = 540;
     const GAME_HEIGHT = 960;
@@ -195,11 +245,11 @@ function saveRanking(key, score) {
     const CONTROLLED_FALL_SPEED = 4.3;
 
     const TYPES = [
-        { id: 'shrimp', emoji: '🦐', radius: 26, weight: 389, score: 10 },
-        { id: 'puffer', emoji: '🐡', radius: 45, weight: 100, score: 25 },
+        { id: 'shrimp', emoji: '🦐', radius: 36, weight: 389, score: 10 },
+        { id: 'puffer', emoji: '🐡', radius: 50, weight: 100, score: 25 },
         { id: 'fish', emoji: '🐟', radius: 70, weight: 10, score: 60 },
-        { id: 'sprout', emoji: '🌱', radius: 26, weight: 389, score: 10 },
-        { id: 'ricePlant', emoji: '🌾', radius: 45, weight: 100, score: 25 },
+        { id: 'sprout', emoji: '🌱', radius: 36, weight: 389, score: 10 },
+        { id: 'ricePlant', emoji: '🌾', radius: 50, weight: 100, score: 25 },
         { id: 'rice', emoji: '🍚', radius: 70, weight: 10, score: 60 },
         { id: 'sushi', emoji: '🍣', radius: 100, weight: 2, score: 200 }
     ];

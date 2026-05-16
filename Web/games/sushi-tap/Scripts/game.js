@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+import { fetchGlobalRanking, saveGlobalScore, getRanking, resizeCanvas, drawStartScreen, drawGameScreen, drawGameOverScreen } from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
 const firebaseConfig = { 
@@ -15,6 +16,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const firebaseOps = { collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp };
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -54,47 +56,12 @@ const t = (key) => translations[currentLang][key] || key;
 let canvasWidth, canvasHeight;
 let score = 0;
 let gameState = 'start'; // 'start', 'playing', 'gameOver'
-let globalRanking = [];
-let isLoadingRanking = false;
+const rankingState = { globalRanking: [], isLoadingRanking: false };
 
 // --- Ranking Configuration ---
 const STORAGE_KEY_ALL_TIME = 'sushicious_all_time_rank';
 const STORAGE_KEY_DAILY = 'sushicious_daily_rank';
 const GLOBAL_COLLECTION = 'rankings_tap';
-
-async function fetchGlobalRanking() {
-    if (isLoadingRanking) return;
-    isLoadingRanking = true;
-    try {
-        const q = query(collection(db, GLOBAL_COLLECTION), orderBy("score", "desc"), limit(3));
-        const querySnapshot = await getDocs(q);
-        globalRanking = querySnapshot.docs.map(doc => doc.data());
-    } catch (e) {
-        console.error("Error fetching ranking: ", e);
-    } finally {
-        isLoadingRanking = false;
-    }
-}
-
-async function saveGlobalScore(score) {
-    if (score <= 0) return;
-    try {
-        await addDoc(collection(db, "rankings_tap"), {
-            score: score,
-            timestamp: serverTimestamp(),
-            userAgent: navigator.userAgent
-        });
-        // Refresh ranking after saving
-        fetchGlobalRanking();
-    } catch (e) {
-        console.error("Error adding document: ", e);
-    }
-}
-
-function getRanking(key) {
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : [];
-}
 
 function saveRanking(key, score) {
     let ranking = getRanking(key);
@@ -116,7 +83,14 @@ function saveRanking(key, score) {
     
     // Also save to Firebase if it's high enough (simplified: always send to Firebase)
     if (key === STORAGE_KEY_ALL_TIME) {
-        saveGlobalScore(score);
+        saveGlobalScore({
+            db,
+            firebase: firebaseOps,
+            collectionName: GLOBAL_COLLECTION,
+            score,
+            topN: 3,
+            state: rankingState
+        });
     }
 }
 
@@ -124,66 +98,10 @@ function saveRanking(key, score) {
 let targets = [];
 let targetSpeed = 3;
 
-function resizeCanvas() {
-    // Use clientHeight/Width for better mobile precision
-    let viewWidth = document.documentElement.clientWidth;
-    let viewHeight = document.documentElement.clientHeight;
-    
-    canvasWidth = viewWidth;
-    canvasHeight = viewHeight;
-    
-    const maxAspectRatio = 9 / 16;
-    if (viewWidth / viewHeight > maxAspectRatio) {
-        canvasWidth = Math.floor(viewHeight * maxAspectRatio);
-    }
-    
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    canvas.style.width = canvasWidth + 'px';
-    canvas.style.height = canvasHeight + 'px';
-}
-
-function drawRankList(title, list, yStart, isGlobal = false) {
-    ctx.fillStyle = '#f0f0f0';
-    ctx.font = 'bold 20px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(title, canvasWidth / 2, yStart);
-    
-    ctx.font = 'bold 18px monospace';
-    if (isGlobal && isLoadingRanking && list.length === 0) {
-        ctx.fillStyle = '#999';
-        ctx.fillText(t('loading'), canvasWidth / 2, yStart + 35);
-    } else if (list.length === 0) {
-        ctx.fillStyle = '#666';
-        ctx.fillText('-', canvasWidth / 2, yStart + 35);
-    } else {
-        list.forEach((item, i) => {
-            ctx.fillStyle = i === 0 ? '#ffd700' : (i === 1 ? '#e0e0e0' : (i === 2 ? '#cd7f32' : '#ffffff'));
-            ctx.fillText(`${i + 1}. ${item.score} ${t('pts')}`, canvasWidth / 2, yStart + 35 + (i * 28));
-        });
-    }
-}
-
-function drawStartScreen() {
-    ctx.fillStyle = '#0f0f0f';
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    
-    // Draw Border
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
-    
-    ctx.fillStyle = '#ff3e3e';
-    ctx.font = 'bold 44px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(t('game_title'), canvasWidth / 2, canvasHeight * 0.15);
-    
-    // World Ranking from Firebase
-    drawRankList(t('community_top'), globalRanking, canvasHeight * 0.35, true);
-
-    ctx.fillStyle = `rgba(240, 240, 240, ${0.7 + Math.sin(Date.now() / 300) * 0.3})`;
-    ctx.font = '22px sans-serif';
-    ctx.fillText(t('tap_to_start'), canvasWidth / 2, canvasHeight * 0.85);
+function applyResize() {
+    const size = resizeCanvas({ canvas });
+    canvasWidth = size.canvasWidth;
+    canvasHeight = size.canvasHeight;
 }
 
 // --- Drawing Helpers ---
@@ -206,56 +124,6 @@ function drawRoundedRect(ctx, x, y, width, height, radius) {
         ctx.closePath();
         ctx.fill();
     }
-}
-
-function drawGameScreen() {
-    ctx.fillStyle = '#121212';
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    targets.forEach(target => {
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        if (ctx.ellipse) {
-            ctx.ellipse(target.x, target.y + 10, target.size / 2, target.size / 3, 0, 0, Math.PI * 2);
-        } else {
-            ctx.arc(target.x, target.y + 10, target.size / 2.5, 0, Math.PI * 2);
-        }
-        ctx.fill();
-        ctx.strokeStyle = '#e0e0e0';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.fillStyle = '#ff3e3e';
-        drawRoundedRect(ctx, target.x - target.size / 2, target.y - target.size / 4, target.size, target.size / 2, 8);
-    });
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 28px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`${t('score')}: ${score}`, 15, 45);
-}
-
-function drawGameOverScreen() {
-    ctx.fillStyle = 'rgba(15, 15, 15, 0.9)';
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 40px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(t('game_over'), canvasWidth / 2, canvasHeight * 0.15);
-    
-    ctx.fillStyle = '#ffcc00';
-    ctx.font = 'bold 54px sans-serif';
-    ctx.fillText(score, canvasWidth / 2, canvasHeight * 0.28);
-    ctx.font = 'bold 20px sans-serif';
-    ctx.fillText(t('score').toUpperCase(), canvasWidth / 2, canvasHeight * 0.33);
-
-    const allTime = getRanking(STORAGE_KEY_ALL_TIME);
-    const daily = getRanking(STORAGE_KEY_DAILY);
-
-    drawRankList(t('all_time_top'), allTime, canvasHeight * 0.45);
-    drawRankList(t('today_top'), daily, canvasHeight * 0.70);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '20px sans-serif';
-    ctx.fillText(t('tap_to_retry'), canvasWidth / 2, canvasHeight * 0.92);
 }
 
 function update() {
@@ -295,11 +163,50 @@ function gameLoop() {
     notifyParentState();
     currentLang = localStorage.getItem('sushicious_lang') || 'en';
     if (gameState === 'start') {
-        drawStartScreen();
+        drawStartScreen({
+            ctx,
+            canvasWidth,
+            canvasHeight,
+            t,
+            globalRanking: rankingState.globalRanking,
+            isLoadingRanking: rankingState.isLoadingRanking
+        });
     } else if (gameState === 'playing') {
-        drawGameScreen();
+        drawGameScreen({
+            ctx,
+            canvasWidth,
+            canvasHeight,
+            t,
+            score,
+            drawPlayfield: () => {
+                targets.forEach(target => {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    if (ctx.ellipse) {
+                        ctx.ellipse(target.x, target.y + 10, target.size / 2, target.size / 3, 0, 0, Math.PI * 2);
+                    } else {
+                        ctx.arc(target.x, target.y + 10, target.size / 2.5, 0, Math.PI * 2);
+                    }
+                    ctx.fill();
+                    ctx.strokeStyle = '#e0e0e0';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    ctx.fillStyle = '#ff3e3e';
+                    drawRoundedRect(ctx, target.x - target.size / 2, target.y - target.size / 4, target.size, target.size / 2, 8);
+                });
+            }
+        });
     } else if (gameState === 'gameOver') {
-        drawGameOverScreen();
+        drawGameOverScreen({
+            ctx,
+            canvasWidth,
+            canvasHeight,
+            t,
+            score,
+            storageKeyAllTime: STORAGE_KEY_ALL_TIME,
+            storageKeyDaily: STORAGE_KEY_DAILY,
+            getRanking
+        });
     }
     requestAnimationFrame(gameLoop);
 }
@@ -346,16 +253,22 @@ function handleTap(event) {
         gameState = 'start';
         lastStateChange = now;
         // Fetch latest rankings when returning to start screen
-        fetchGlobalRanking();
+        fetchGlobalRanking({
+            db,
+            firebase: firebaseOps,
+            collectionName: GLOBAL_COLLECTION,
+            topN: 3,
+            state: rankingState
+        });
     }
 }
 
 window.addEventListener('resize', () => {
-    setTimeout(resizeCanvas, 100);
+    setTimeout(applyResize, 100);
 }, false);
 canvas.addEventListener('touchstart', handleTap, { passive: false });
 canvas.addEventListener('mousedown', handleTap, false);
 
-resizeCanvas();
-fetchGlobalRanking(); // Initial fetch
+applyResize();
+fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
 gameLoop();
