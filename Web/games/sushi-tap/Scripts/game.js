@@ -65,7 +65,11 @@ const GLOBAL_COLLECTION = 'rankings_tap';
 
 // --- Game Objects ---
 let targets = [];
-let targetSpeed = 3;
+const baseTargetSpeed = 3;
+const targetSpeedIncreasePerSecond = 0.02;
+const maxTargetSpeed = 30;
+let targetSpeed = baseTargetSpeed;
+let playStartTimeMs = 0;
 
 function applyResize() {
     const size = resizeCanvas({ canvas });
@@ -97,6 +101,8 @@ function drawRoundedRect(ctx, x, y, width, height, radius) {
 
 function update() {
     if (gameState !== 'playing') return;
+    const elapsedSeconds = (performance.now() - playStartTimeMs) / 1000;
+    targetSpeed = Math.min(baseTargetSpeed + elapsedSeconds * targetSpeedIncreasePerSecond, maxTargetSpeed);
     targets.forEach(target => {
         target.y += targetSpeed;
     });
@@ -230,6 +236,8 @@ function handleTap(event) {
         gameState = 'playing';
         score = 0;
         targets = [];
+        targetSpeed = baseTargetSpeed;
+        playStartTimeMs = performance.now();
         lastStateChange = now;
     } else if (gameState === 'playing') {
         targets.forEach((target, index) => {
