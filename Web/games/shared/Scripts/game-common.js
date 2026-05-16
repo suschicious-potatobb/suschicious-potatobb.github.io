@@ -44,6 +44,44 @@ export function getRanking(key) {
     return data ? JSON.parse(data) : [];
 }
 
+export function saveRanking({
+    key,
+    score,
+    maxEntries = 3,
+    dailyKey,
+    dateKeySuffix = '_date',
+    includeTimestamp = false,
+    getRanking: getRankingFn = getRanking,
+    now = Date.now,
+    getToday = () => new Date().toLocaleDateString(),
+    onSave
+} = {}) {
+    if (!key) return [];
+    if (typeof score !== 'number') return getRankingFn(key);
+
+    let ranking = getRankingFn(key);
+    const today = getToday();
+
+    if (dailyKey && key === dailyKey) {
+        const lastDate = localStorage.getItem(key + dateKeySuffix);
+        if (lastDate !== today) {
+            ranking = [];
+            localStorage.setItem(key + dateKeySuffix, today);
+        }
+    }
+
+    const entry = { score, date: today };
+    if (includeTimestamp) entry.timestamp = now();
+    ranking.push(entry);
+
+    ranking.sort((a, b) => b.score - a.score);
+    ranking = ranking.slice(0, maxEntries);
+    localStorage.setItem(key, JSON.stringify(ranking));
+
+    if (typeof onSave === 'function') onSave({ key, score, ranking, today });
+    return ranking;
+}
+
 export function resizeCanvas({ canvas, maxAspectRatio = 9 / 16 } = {}) {
     if (!canvas) return { canvasWidth: 0, canvasHeight: 0 };
     const viewWidth = document.documentElement.clientWidth;
@@ -92,7 +130,7 @@ export function drawRankList({ ctx, t, canvasWidth, title, list, yStart, isGloba
     }
 }
 
-export function drawStartScreen({ ctx, canvasWidth, canvasHeight, t, globalRanking = [], isLoadingRanking = false } = {}) {
+export function drawStartScreen({ ctx, canvasWidth, canvasHeight, t, globalRanking = [], isLoadingRanking = false, subtitleText } = {}) {
     if (!ctx) return;
 
     ctx.fillStyle = '#0f0f0f';
@@ -108,6 +146,12 @@ export function drawStartScreen({ ctx, canvasWidth, canvasHeight, t, globalRanki
     ctx.font = 'bold 44px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(translate('game_title'), canvasWidth / 2, canvasHeight * 0.15);
+
+    if (subtitleText) {
+        ctx.fillStyle = '#f0f0f0';
+        ctx.font = '22px sans-serif';
+        ctx.fillText(subtitleText, canvasWidth / 2, canvasHeight * 0.23);
+    }
 
     drawRankList({
         ctx,
@@ -125,7 +169,7 @@ export function drawStartScreen({ ctx, canvasWidth, canvasHeight, t, globalRanki
     ctx.fillText(translate('tap_to_start'), canvasWidth / 2, canvasHeight * 0.85);
 }
 
-export function drawGameScreen({ ctx, canvasWidth, canvasHeight, t, score, drawPlayfield } = {}) {
+export function drawGameScreen({ ctx, canvasWidth, canvasHeight, t, score, drawPlayfield, showDefaultScore = true } = {}) {
     if (!ctx) return;
     const translate = typeof t === 'function' ? t : (key) => key;
 
@@ -136,6 +180,7 @@ export function drawGameScreen({ ctx, canvasWidth, canvasHeight, t, score, drawP
         drawPlayfield({ ctx, canvasWidth, canvasHeight });
     }
 
+    if (!showDefaultScore) return;
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 28px sans-serif';
     ctx.textAlign = 'left';
@@ -150,7 +195,9 @@ export function drawGameOverScreen({
     score,
     storageKeyAllTime,
     storageKeyDaily,
-    getRanking: getRankingFn = getRanking
+    getRanking: getRankingFn = getRanking,
+    showScore = true,
+    sections
 } = {}) {
     if (!ctx) return;
     const translate = typeof t === 'function' ? t : (key) => key;
@@ -163,31 +210,49 @@ export function drawGameOverScreen({
     ctx.textAlign = 'center';
     ctx.fillText(translate('game_over'), canvasWidth / 2, canvasHeight * 0.15);
 
-    ctx.fillStyle = '#ffcc00';
-    ctx.font = 'bold 54px sans-serif';
-    ctx.fillText(score, canvasWidth / 2, canvasHeight * 0.28);
-    ctx.font = 'bold 20px sans-serif';
-    ctx.fillText(translate('score').toUpperCase(), canvasWidth / 2, canvasHeight * 0.33);
+    if (showScore) {
+        ctx.fillStyle = '#ffcc00';
+        ctx.font = 'bold 54px sans-serif';
+        ctx.fillText(score, canvasWidth / 2, canvasHeight * 0.28);
+        ctx.font = 'bold 20px sans-serif';
+        ctx.fillText(translate('score').toUpperCase(), canvasWidth / 2, canvasHeight * 0.33);
+    }
 
-    const allTime = storageKeyAllTime ? getRankingFn(storageKeyAllTime) : [];
-    const daily = storageKeyDaily ? getRankingFn(storageKeyDaily) : [];
+    if (Array.isArray(sections) && sections.length > 0) {
+        for (const section of sections) {
+            if (!section) continue;
+            drawRankList({
+                ctx,
+                t: translate,
+                canvasWidth,
+                title: section.title,
+                list: section.list || [],
+                yStart: section.yStart,
+                isGlobal: Boolean(section.isGlobal),
+                isLoadingRanking: Boolean(section.isLoadingRanking)
+            });
+        }
+    } else {
+        const allTime = storageKeyAllTime ? getRankingFn(storageKeyAllTime) : [];
+        const daily = storageKeyDaily ? getRankingFn(storageKeyDaily) : [];
 
-    drawRankList({
-        ctx,
-        t: translate,
-        canvasWidth,
-        title: translate('all_time_top'),
-        list: allTime,
-        yStart: canvasHeight * 0.45
-    });
-    drawRankList({
-        ctx,
-        t: translate,
-        canvasWidth,
-        title: translate('today_top'),
-        list: daily,
-        yStart: canvasHeight * 0.70
-    });
+        drawRankList({
+            ctx,
+            t: translate,
+            canvasWidth,
+            title: translate('all_time_top'),
+            list: allTime,
+            yStart: canvasHeight * 0.45
+        });
+        drawRankList({
+            ctx,
+            t: translate,
+            canvasWidth,
+            title: translate('today_top'),
+            list: daily,
+            yStart: canvasHeight * 0.70
+        });
+    }
 
     ctx.fillStyle = '#ffffff';
     ctx.font = '20px sans-serif';

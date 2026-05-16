@@ -1,6 +1,16 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { fetchGlobalRanking, saveGlobalScore, getRanking, resizeCanvas } from "../../shared/Scripts/game-common.js";
+import {
+    fetchGlobalRanking,
+    saveGlobalScore,
+    getRanking,
+    saveRanking,
+    resizeCanvas,
+    drawRankList,
+    drawStartScreen,
+    drawGameScreen,
+    drawGameOverScreen,
+} from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
 const firebaseConfig = { 
@@ -70,17 +80,6 @@ let cards = [];
 let selectedCards = [];
 const sushiEmojis = ['🍣', '🦐', '🍳', '🐙', '🥢', '🍵', '🍶', '🍱'];
 
-function saveRanking(key, score) {
-    let ranking = getRanking(key);
-    ranking.push({ score, date: new Date().toLocaleDateString() });
-    ranking.sort((a, b) => b.score - a.score);
-    localStorage.setItem(key, JSON.stringify(ranking.slice(0, 3)));
-    
-    if (key === STORAGE_KEY_ALL_TIME) {
-        saveGlobalScore({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, score, topN: 3, state: rankingState });
-    }
-}
-
 function applyResize() {
     const size = resizeCanvas({ canvas });
     canvasWidth = size.canvasWidth;
@@ -106,54 +105,112 @@ function update() {
     } else {
         timeLeft = 0;
         gameState = 'gameOver';
-        saveRanking(STORAGE_KEY_ALL_TIME, score);
+        saveRanking({
+            key: STORAGE_KEY_ALL_TIME,
+            score,
+            maxEntries: 3,
+            includeTimestamp: true,
+            onSave: () => {
+                saveGlobalScore({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, score, topN: 3, state: rankingState });
+            }
+        });
+        saveRanking({
+            key: STORAGE_KEY_DAILY,
+            score,
+            maxEntries: 3,
+            dailyKey: STORAGE_KEY_DAILY,
+            includeTimestamp: true
+        });
     }
 }
 
 function draw() {
-    ctx.fillStyle = '#0f0f0f';
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    if (gameState === 'start') {
+        drawStartScreen({
+            ctx,
+            canvasWidth,
+            canvasHeight,
+            t,
+            subtitleText: t('tap_to_start'),
+            globalRanking: rankingState.globalRanking,
+            isLoadingRanking: rankingState.isLoadingRanking
+        });
+        return;
+    }
+    if (gameState === 'gameOver') {
+        drawGameOverScreen({
+            ctx,
+            canvasWidth,
+            canvasHeight,
+            t,
+            score,
+            showScore: false,
+            sections: [
+                {
+                    title: t('community_top'),
+                    list: rankingState.globalRanking,
+                    yStart: canvasHeight * 0.45,
+                    isGlobal: true,
+                    isLoadingRanking: rankingState.isLoadingRanking
+                }
+            ]
+        });
+        drawRankList({
+            ctx,
+            t,
+            canvasWidth,
+            title: t('all_time_top'),
+            list: getRanking(STORAGE_KEY_ALL_TIME),
+            yStart: canvasHeight * 0.70
+        });
+        return;
+    }
 
-    // Draw Border
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
+    drawGameScreen({
+        ctx,
+        canvasWidth,
+        canvasHeight,
+        t,
+        score,
+        showDefaultScore: false,
+        drawPlayfield: () => {
+            ctx.fillStyle = '#0f0f0f';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-    // Draw Grid
-    const { padding, cardSize, gridYStart, cellStep } = getGridLayout();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
 
-    cards.forEach((card, i) => {
-        const row = Math.floor(i / GRID_SIZE);
-        const col = i % GRID_SIZE;
-        const x = padding + col * cellStep;
-        const y = gridYStart + row * cellStep;
+            const { padding, cardSize, gridYStart, cellStep } = getGridLayout();
 
-        ctx.fillStyle = card.isMatched ? 'rgba(255, 255, 255, 0.1)' : (card.isFlipped ? '#fff' : '#e63946');
-        ctx.beginPath();
-        ctx.roundRect(x, y, cardSize, cardSize, 8);
-        ctx.fill();
+            cards.forEach((card, i) => {
+                const row = Math.floor(i / GRID_SIZE);
+                const col = i % GRID_SIZE;
+                const x = padding + col * cellStep;
+                const y = gridYStart + row * cellStep;
 
-        if (card.isFlipped || card.isMatched) {
-            ctx.font = `${cardSize * 0.6}px Arial`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(card.emoji, x + cardSize / 2, y + cardSize / 2);
+                ctx.fillStyle = card.isMatched ? 'rgba(255, 255, 255, 0.1)' : (card.isFlipped ? '#fff' : '#e63946');
+                ctx.beginPath();
+                ctx.roundRect(x, y, cardSize, cardSize, 8);
+                ctx.fill();
+
+                if (card.isFlipped || card.isMatched) {
+                    ctx.font = `${cardSize * 0.6}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = '#000';
+                    ctx.fillText(card.emoji, x + cardSize / 2, y + cardSize / 2);
+                }
+            });
+
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 24px Inter, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${t('score')}: ${score}`, 20, 45);
+            ctx.textAlign = 'right';
+            ctx.fillText(`${t('time')}: ${Math.ceil(timeLeft)}s`, canvasWidth - 20, 45);
         }
     });
-
-    // Draw UI
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 24px Inter, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`${t('score')}: ${score}`, 20, 45);
-    ctx.textAlign = 'right';
-    ctx.fillText(`${t('time')}: ${Math.ceil(timeLeft)}s`, canvasWidth - 20, 45);
-
-    if (gameState === 'start') {
-        drawOverlay(t('game_title'), t('tap_to_start'));
-    } else if (gameState === 'gameOver') {
-        drawGameOver();
-    }
 }
 
 function getGridLayout() {
@@ -165,43 +222,6 @@ function getGridLayout() {
     return { padding, cardSize, gridYStart, cellStep };
 }
 
-function drawOverlay(title, subtitle) {
-    ctx.fillStyle = 'rgba(0,0,0,0.8)';
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    
-    ctx.fillStyle = '#e63946';
-    ctx.font = 'bold 44px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(title, canvasWidth/2, canvasHeight * 0.2);
-    
-    ctx.fillStyle = '#fff';
-    ctx.font = '24px Inter, sans-serif';
-    ctx.fillText(subtitle, canvasWidth/2, canvasHeight * 0.28);
-
-    if (rankingState.isLoadingRanking) {
-        ctx.font = '18px Inter, sans-serif';
-        ctx.fillText(t('loading'), canvasWidth/2, canvasHeight * 0.8);
-    } else {
-        drawRankings();
-    }
-}
-
-function drawRankings() {
-    let y = canvasHeight * 0.45;
-    ctx.font = 'bold 20px Inter, sans-serif';
-    ctx.fillStyle = '#d4af37';
-    ctx.fillText(t('community_top'), canvasWidth/2, y);
-    
-    ctx.font = '18px Inter, sans-serif';
-    ctx.fillStyle = '#fff';
-    rankingState.globalRanking.forEach((r, i) => {
-        ctx.fillText(`${i+1}. ${r.score}${t('pts')}`, canvasWidth/2, y + 35 + i*30);
-    });
-}
-
-function drawGameOver() {
-    drawOverlay(t('game_over'), t('tap_to_retry'));
-}
 
 let lastNotifiedState = '';
 function notifyParentState() {

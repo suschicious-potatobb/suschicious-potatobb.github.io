@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-analytics.js";
+import { fetchGlobalRanking, saveGlobalScore, getRanking, resizeCanvas } from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
 const firebaseConfig = { 
@@ -16,7 +17,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const analytics = getAnalytics(app);
+const firebaseOps = { collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp };
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -57,10 +58,10 @@ let canvasWidth, canvasHeight;
 let score = 0;
 let lives = 3;
 let gameState = 'start'; // 'start', 'playing', 'gameOver'
-let globalRanking = [];
-let isLoadingRanking = false;
+const rankingState = { globalRanking: [], isLoadingRanking: false };
 
 const STORAGE_KEY_ALL_TIME = 'sushicious_catch_all_time_rank';
+const GLOBAL_COLLECTION = 'rankings_catch';
 
 // --- Sushi & Plate ---
 let plate = { x: 0, y: 0, width: 80, height: 20 };
@@ -72,39 +73,6 @@ const sushiTypes = [
     { name: 'egg', color: '#ffd700', textColor: '#000', label: '🍳' }
 ];
 
-async function fetchGlobalRanking() {
-    if (isLoadingRanking) return;
-    isLoadingRanking = true;
-    try {
-        const q = query(collection(db, "rankings_catch"), orderBy("score", "desc"), limit(3));
-        const querySnapshot = await getDocs(q);
-        globalRanking = querySnapshot.docs.map(doc => doc.data());
-    } catch (e) {
-        console.error("Error fetching ranking: ", e);
-    } finally {
-        isLoadingRanking = false;
-    }
-}
-
-async function saveGlobalScore(score) {
-    if (score <= 0) return;
-    try {
-        await addDoc(collection(db, "rankings_catch"), {
-            score: score,
-            timestamp: serverTimestamp(),
-            userAgent: navigator.userAgent
-        });
-        fetchGlobalRanking();
-    } catch (e) {
-        console.error("Error adding document: ", e);
-    }
-}
-
-function getRanking(key) {
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : [];
-}
-
 function saveRanking(key, score) {
     let ranking = getRanking(key);
     ranking.push({ score, date: new Date().toLocaleDateString() });
@@ -113,26 +81,14 @@ function saveRanking(key, score) {
     
     // Explicitly call saveGlobalScore when local ranking is saved
     if (key === STORAGE_KEY_ALL_TIME) {
-        saveGlobalScore(score);
+        saveGlobalScore({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, score, topN: 3, state: rankingState });
     }
 }
 
-function resize() {
-    const viewWidth = document.documentElement.clientWidth;
-    const viewHeight = document.documentElement.clientHeight;
-    
-    canvasWidth = viewWidth;
-    canvasHeight = viewHeight;
-    
-    const maxAspectRatio = 9 / 16;
-    if (viewWidth / viewHeight > maxAspectRatio) {
-        canvasWidth = Math.floor(viewHeight * maxAspectRatio);
-    }
-    
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    canvas.style.width = canvasWidth + 'px';
-    canvas.style.height = canvasHeight + 'px';
+function applyResize() {
+    const size = resizeCanvas({ canvas });
+    canvasWidth = size.canvasWidth;
+    canvasHeight = size.canvasHeight;
     
     plate.width = canvasWidth * 0.25;
     plate.height = 20;
@@ -226,7 +182,7 @@ function drawOverlay(title, subtitle) {
     ctx.font = '20px Inter, sans-serif';
     ctx.fillText(subtitle, canvasWidth/2, canvasHeight/2 + 20);
 
-    if (isLoadingRanking) {
+    if (rankingState.isLoadingRanking) {
         ctx.font = '16px Inter, sans-serif';
         ctx.fillText(t('loading'), canvasWidth/2, canvasHeight/2 + 150);
     } else {
@@ -242,7 +198,7 @@ function drawRankings() {
     
     ctx.font = '14px Inter, sans-serif';
     ctx.fillStyle = '#fff';
-    globalRanking.forEach((r, i) => {
+    rankingState.globalRanking.forEach((r, i) => {
         ctx.fillText(`${i+1}. ${r.score}${t('pts')}`, canvasWidth/2, y + 25 + i*20);
     });
 
@@ -286,7 +242,7 @@ function gameLoop() {
 
 // --- Events ---
 window.addEventListener('resize', () => {
-    setTimeout(resize, 100);
+    setTimeout(applyResize, 100);
 });
 
 let isInputActive = false;
@@ -307,7 +263,7 @@ canvas.addEventListener('mousedown', (e) => {
         score = 0;
         lives = 3;
         sushis = [];
-        fetchGlobalRanking();
+        fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
     } else {
         handleInput(e.clientX);
     }
@@ -330,7 +286,7 @@ canvas.addEventListener('touchstart', (e) => {
         score = 0;
         lives = 3;
         sushis = [];
-        fetchGlobalRanking();
+        fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
     } else {
         handleInput(e.touches[0].clientX);
     }
@@ -347,6 +303,6 @@ window.addEventListener('touchend', () => {
     isInputActive = false;
 });
 
-resize();
-fetchGlobalRanking();
+applyResize();
+fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
 gameLoop();

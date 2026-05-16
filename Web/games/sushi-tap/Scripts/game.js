@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { fetchGlobalRanking, saveGlobalScore, getRanking, resizeCanvas, drawStartScreen, drawGameScreen, drawGameOverScreen } from "../../shared/Scripts/game-common.js";
+import { fetchGlobalRanking, saveGlobalScore, getRanking, saveRanking, resizeCanvas, drawStartScreen, drawGameScreen, drawGameOverScreen } from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
 const firebaseConfig = { 
@@ -63,37 +63,6 @@ const STORAGE_KEY_ALL_TIME = 'sushicious_all_time_rank';
 const STORAGE_KEY_DAILY = 'sushicious_daily_rank';
 const GLOBAL_COLLECTION = 'rankings_tap';
 
-function saveRanking(key, score) {
-    let ranking = getRanking(key);
-    const today = new Date().toLocaleDateString();
-    
-    // For daily rank, check if the data is from today
-    if (key === STORAGE_KEY_DAILY) {
-        const lastDate = localStorage.getItem(key + '_date');
-        if (lastDate !== today) {
-            ranking = [];
-            localStorage.setItem(key + '_date', today);
-        }
-    }
-
-    ranking.push({ score, date: today, timestamp: Date.now() });
-    ranking.sort((a, b) => b.score - a.score);
-    ranking = ranking.slice(0, 3); // Keep only top 3
-    localStorage.setItem(key, JSON.stringify(ranking));
-    
-    // Also save to Firebase if it's high enough (simplified: always send to Firebase)
-    if (key === STORAGE_KEY_ALL_TIME) {
-        saveGlobalScore({
-            db,
-            firebase: firebaseOps,
-            collectionName: GLOBAL_COLLECTION,
-            score,
-            topN: 3,
-            state: rankingState
-        });
-    }
-}
-
 // --- Game Objects ---
 let targets = [];
 let targetSpeed = 3;
@@ -141,8 +110,29 @@ function update() {
     }
     if (targets.some(t => t.y > canvasHeight + 50)) {
         gameState = 'gameOver';
-        saveRanking(STORAGE_KEY_ALL_TIME, score);
-        saveRanking(STORAGE_KEY_DAILY, score);
+        saveRanking({
+            key: STORAGE_KEY_ALL_TIME,
+            score,
+            maxEntries: 3,
+            includeTimestamp: true,
+            onSave: () => {
+                saveGlobalScore({
+                    db,
+                    firebase: firebaseOps,
+                    collectionName: GLOBAL_COLLECTION,
+                    score,
+                    topN: 3,
+                    state: rankingState
+                });
+            }
+        });
+        saveRanking({
+            key: STORAGE_KEY_DAILY,
+            score,
+            maxEntries: 3,
+            dailyKey: STORAGE_KEY_DAILY,
+            includeTimestamp: true
+        });
         lastStateChange = Date.now();
     }
     if (targets.length > 50) {
