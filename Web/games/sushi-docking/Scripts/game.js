@@ -1,88 +1,184 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+const FIREBASE_ENABLED = false;
 
-const firebaseConfig = {
-    apiKey: "AIzaSyDffNMWkocUzsvZkbX_sOXtk5NHr8-KQME",
-    authDomain: "sushicious-games.firebaseapp.com",
-    projectId: "sushicious-games",
-    storageBucket: "sushicious-games.firebasestorage.app",
-    messagingSenderId: "597158694276",
-    appId: "1:597158694276:web:c52ac21a53f9637d0d61d1",
-    measurementId: "G-3CY5YW1H20"
+const _memoryStorage = new Map();
+const storage = {
+    getItem(key) {
+        try {
+            return localStorage.getItem(key);
+        } catch {
+            return _memoryStorage.has(key) ? _memoryStorage.get(key) : null;
+        }
+    },
+    setItem(key, value) {
+        const v = String(value);
+        try {
+            localStorage.setItem(key, v);
+        } catch {
+            _memoryStorage.set(key, v);
+        }
+    },
+    removeItem(key) {
+        try {
+            localStorage.removeItem(key);
+        } catch {
+            _memoryStorage.delete(key);
+        }
+    }
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
+// --- Multilingual Support ---
 const translations = {
     en: {
+        game_title: "Sushi Docking",
+        tap_to_start: "Tap to Start",
+        score: "Score",
+        game_over: "GAME OVER",
         all_time_top: "--- YOUR BEST 3 ---",
         today_top: "--- TODAY BEST 3 ---",
         community_top: "--- GLOBAL TOP 3 ---",
-        tap_to_start: "Tap to Start",
         tap_to_retry: "Tap to Retry",
-        score: "Score",
+        pts: "pts",
         loading: "Loading..."
     },
     ja: {
+        game_title: "寿司Docking",
+        tap_to_start: "タップしてスタート",
+        score: "スコア",
+        game_over: "ゲームオーバー",
         all_time_top: "--- あなたのベスト3 ---",
         today_top: "--- 本日のベスト3 ---",
         community_top: "--- 世界ランキング ---",
-        tap_to_start: "タップしてスタート",
         tap_to_retry: "タップしてリトライ",
-        score: "スコア",
+        pts: "点",
         loading: "読み込み中..."
     }
 };
 
-let currentLang = localStorage.getItem('sushicious_lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en');
+let currentLang = storage.getItem('sushicious_lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en');
 const t = (key) => translations[currentLang]?.[key] || key;
 
+let score = 0;
+let gameState = 'start'; // 'start', 'playing', 'gameOver'
+let globalRanking = [];
+let isLoadingRanking = false;
+
+// --- Ranking Configuration ---
 const STORAGE_KEY_ALL_TIME = 'sushicious_docking_all_time_rank';
 const STORAGE_KEY_DAILY = 'sushicious_docking_daily_rank';
 const GLOBAL_COLLECTION = 'rankings_docking';
 
+async function fetchGlobalRanking() {
+    if (isLoadingRanking) return;
+    isLoadingRanking = true;
+    try {
+        if (!FIREBASE_ENABLED) {
+            globalRanking = [];
+            return [];
+        }
+        globalRanking = [];
+        return globalRanking;
+    } catch (e) {
+        console.error("Error fetching ranking: ", e);
+        globalRanking = [];
+        return [];
+    } finally {
+        isLoadingRanking = false;
+    }
+}
+
+async function saveGlobalScore(score) {
+    if (score <= 0) return;
+    try {
+        if (!FIREBASE_ENABLED) return;
+    } catch (e) {
+        console.error("Error adding document: ", e);
+    }
+}
+
 function getRanking(key) {
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : [];
+    const data = storage.getItem(key);
+    if (!data) return [];
+    try {
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        storage.removeItem(key);
+        return [];
+    }
 }
 
 function saveRanking(key, score) {
     let ranking = getRanking(key);
     const today = new Date().toLocaleDateString();
-
+    
+    // For daily rank, check if the data is from today
     if (key === STORAGE_KEY_DAILY) {
-        const lastDate = localStorage.getItem(key + '_date');
+        const lastDate = storage.getItem(key + '_date');
         if (lastDate !== today) {
             ranking = [];
-            localStorage.setItem(key + '_date', today);
+            storage.setItem(key + '_date', today);
         }
     }
 
     ranking.push({ score, date: today, timestamp: Date.now() });
     ranking.sort((a, b) => b.score - a.score);
-    ranking = ranking.slice(0, 3);
-    localStorage.setItem(key, JSON.stringify(ranking));
+    ranking = ranking.slice(0, 3); // Keep only top 3
+    storage.setItem(key, JSON.stringify(ranking));
+    
+    // Also save to Firebase if it's high enough (simplified: always send to Firebase)
+    if (key === STORAGE_KEY_ALL_TIME) {
+        saveGlobalScore(score);
+    }
 }
-
-async function fetchGlobalRankingTop3() {
-    const q = query(collection(db, GLOBAL_COLLECTION), orderBy("score", "desc"), limit(3));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => doc.data());
-}
-
-async function saveGlobalScore(score) {
-    if (score <= 0) return;
-    await addDoc(collection(db, GLOBAL_COLLECTION), {
-        score,
-        timestamp: serverTimestamp(),
-        userAgent: navigator.userAgent
-    });
-}
-
 (() => {
     const GAME_WIDTH = 540;
     const GAME_HEIGHT = 960;
+
+    const canvas = document.getElementById('gameCanvas') || (() => {
+        const c = document.createElement('canvas');
+        c.id = 'gameCanvas';
+        document.body.appendChild(c);
+        return c;
+    })();
+
+    let currentZoom = 1;
+
+    function computeCanvasSize() {
+        const viewWidth = Math.max(1, document.documentElement.clientWidth || window.innerWidth || 1);
+        const viewHeight = Math.max(1, document.documentElement.clientHeight || window.innerHeight || 1);
+
+        let width = viewWidth;
+        const maxAspectRatio = 9 / 16;
+        if (viewWidth / viewHeight > maxAspectRatio) {
+            width = Math.floor(viewHeight * maxAspectRatio);
+        }
+
+        return { width: Math.max(1, width), height: Math.max(1, viewHeight) };
+    }
+
+    function applyViewport(game) {
+        const { width, height } = computeCanvasSize();
+        if (width <= 1 || height <= 1) {
+            requestAnimationFrame(() => applyViewport(game));
+            return;
+        }
+        currentZoom = Math.min(width / GAME_WIDTH, height / GAME_HEIGHT);
+
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+
+        if (game?.scale?.resize) {
+            game.scale.resize(width, height);
+        }
+
+        const scenes = game?.scene?.getScenes(true) || [];
+        for (const scene of scenes) {
+            const cam = scene.cameras?.main;
+            if (!cam) continue;
+            cam.setZoom(currentZoom);
+            cam.centerOn(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+        }
+    }
 
     const CONTAINER = {
         x: 70,
@@ -162,13 +258,15 @@ async function saveGlobalScore(score) {
 
         create() {
             this.cameras.main.setBackgroundColor('#0f0f0f');
+            this.cameras.main.setZoom(currentZoom);
+            this.cameras.main.centerOn(GAME_WIDTH / 2, GAME_HEIGHT / 2);
             this.pieces = new Set();
             this.score = 0;
             this.gameOver = false;
             this.restartQueued = false;
             this.scoreSubmitted = false;
             this.dangerMs = 0;
-            currentLang = localStorage.getItem('sushicious_lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en');
+            currentLang = storage.getItem('sushicious_lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en');
 
             this.started = false;
             this.controlled = null;
@@ -511,7 +609,7 @@ async function saveGlobalScore(score) {
         refreshGlobalRanking() {
             if (this.isLoadingGlobalRanking) return;
             this.isLoadingGlobalRanking = true;
-            fetchGlobalRankingTop3()
+            fetchGlobalRanking()
                 .then((rows) => {
                     this.globalRanking = Array.isArray(rows) ? rows : [];
                 })
@@ -855,11 +953,23 @@ async function saveGlobalScore(score) {
         }
     }
 
+    const preferredRenderType = (() => {
+        try {
+            const testCanvas = document.createElement('canvas');
+            const hasWebGL =
+                !!(window.WebGLRenderingContext && (testCanvas.getContext('webgl') || testCanvas.getContext('experimental-webgl')));
+            return hasWebGL ? Phaser.WEBGL : Phaser.CANVAS;
+        } catch {
+            return Phaser.CANVAS;
+        }
+    })();
+
     const config = {
-        type: Phaser.AUTO,
-        parent: 'game-container',
-        width: GAME_WIDTH,
-        height: GAME_HEIGHT,
+        type: preferredRenderType,
+        renderType: preferredRenderType,
+        canvas,
+        width: computeCanvasSize().width,
+        height: computeCanvasSize().height,
         backgroundColor: '#0f0f0f',
         physics: {
             default: 'matter',
@@ -868,12 +978,12 @@ async function saveGlobalScore(score) {
                 debug: false
             }
         },
-        scale: {
-            mode: Phaser.Scale.FIT,
-            autoCenter: Phaser.Scale.CENTER_BOTH
-        },
+        scale: { mode: Phaser.Scale.NONE },
         scene: [MainScene]
     };
 
-    new Phaser.Game(config);
+    const game = new Phaser.Game(config);
+    applyViewport(game);
+    setTimeout(() => applyViewport(game), 0);
+    window.addEventListener('resize', () => setTimeout(() => applyViewport(game), 100));
 })();

@@ -22,6 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
             game_tag_action: "Action",
             game_tag_catch: "Catch",
             game_tag_puzzle: "Puzzle",
+            game_special_game_title: "nozo x misa memorial",
+            game_special_game_desc: "A special game for today only",
             game_sushi_tap_title: "Sushi Tap",
             game_sushi_tap_desc: "Tap the falling sushi to score points!",
             game_sushi_catch_title: "Sushi Catch",
@@ -34,6 +36,11 @@ document.addEventListener('DOMContentLoaded', () => {
             about_game: "About this game",
             how_to_play: "How to play",
             pro_tips: "Pro Tips",
+            special_game_desc_long: "A special game for today only",
+            special_game_rule_1: "There are no specific rules! Please choose the option you like!",
+            special_game_rule_2: "Your love score will increase depending on the choices you make!",
+            special_game_rule_3: "Let's try playing around with it to make it even more love score!",
+            special_game_tips: "The option that will boost your popularity the most is the path the bride and groom have actually walked. Enjoy!",
             sushi_tap_desc_long: "Sushi Tap is a simple yet addictive action game where you tap sushi falling from the top of the screen to see how high a score you can get within the time limit. Experience the exhilarating gameplay themed around Sushi, Japan's traditional food culture.",
             sushi_tap_rule_1: "Tap the sushi falling from the top with your finger (or mouse).",
             sushi_tap_rule_2: "Successful taps add to your score.",
@@ -77,6 +84,9 @@ document.addEventListener('DOMContentLoaded', () => {
             game_tag_action: "アクション",
             game_tag_catch: "キャッチ",
             game_tag_puzzle: "パズル",
+            game_tag_special: "特殊ゲーム",
+            game_special_game_title: "のぞみさメモリアル",
+            game_special_game_desc: "今日限りのスペシャルゲーム！",
             game_sushi_tap_title: "寿司タップ",
             game_sushi_tap_desc: "落ちてくる寿司をタップしてハイスコアを目指そう！",
             game_sushi_catch_title: "寿司キャッチ",
@@ -89,6 +99,11 @@ document.addEventListener('DOMContentLoaded', () => {
             about_game: "このゲームについて",
             how_to_play: "遊び方",
             pro_tips: "攻略のコツ",
+            special_game_desc_long: "今日限りの特別なゲーム",
+            special_game_rule_1: "特に決まりはありません！好きな選択肢を選んでください！",
+            special_game_rule_2: "あなたの選んだ選択肢次第で好感度が上昇します！",
+            special_game_rule_3: "より高感度が高くなるように遊んでみましょう！",
+            special_game_tips: "好感度の上昇が大きい選択肢は実際に新郎新婦が歩んだ軌跡です、楽しんでね！",
             sushi_tap_desc_long: "「寿司タップ」は、画面の上から次々と落ちてくるお寿司をタップして、制限時間内にどれだけ高いスコアを出せるかを競う、シンプルながらも中毒性の高いアクションゲームです。日本の伝統的な食文化である「寿司」をテーマにした、爽快感あふれるプレイ体験を楽しめます。",
             sushi_tap_rule_1: "上から落ちてくる寿司を指（またはマウス）でタップしてください。",
             sushi_tap_rule_2: "タップに成功するとスコアが加算されます。",
@@ -137,6 +152,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const games = [
+        {
+            id: 'special-game',
+            sceneUrl: 'games/special-game/Scenes/',
+            titleKey: 'game_special_game_title',
+            descKey: 'game_special_game_desc',
+            tagKey: 'game_tag_special',
+            thumbnail: 'Web/games/special-game/Assets/thumbnail.svg',
+            descLongKey: 'special_game_desc_long',
+            ruleKeys: ['special_game_rule_1', 'special_game_rule_2', 'special_game_rule_3'],
+            tipsKey: 'special_game_tips'
+        },
         {
             id: 'sushi-tap',
             sceneUrl: 'games/sushi-tap/Scenes/',
@@ -189,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         games.forEach(game => {
             const gameCard = document.createElement('a');
-            gameCard.href = `Web/game?id=${encodeURIComponent(game.id)}`;
+            gameCard.href = `Web/game.html?id=${encodeURIComponent(game.id)}`;
             gameCard.className = 'game-card';
 
             const title = translations[currentLang][game.titleKey];

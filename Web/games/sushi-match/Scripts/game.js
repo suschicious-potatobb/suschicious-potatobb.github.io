@@ -16,7 +16,6 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const analytics = getAnalytics(app);
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');

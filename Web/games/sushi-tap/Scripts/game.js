@@ -60,12 +60,13 @@ let isLoadingRanking = false;
 // --- Ranking Configuration ---
 const STORAGE_KEY_ALL_TIME = 'sushicious_all_time_rank';
 const STORAGE_KEY_DAILY = 'sushicious_daily_rank';
+const GLOBAL_COLLECTION = 'rankings_tap';
 
 async function fetchGlobalRanking() {
     if (isLoadingRanking) return;
     isLoadingRanking = true;
     try {
-        const q = query(collection(db, "rankings_tap"), orderBy("score", "desc"), limit(3));
+        const q = query(collection(db, GLOBAL_COLLECTION), orderBy("score", "desc"), limit(3));
         const querySnapshot = await getDocs(q);
         globalRanking = querySnapshot.docs.map(doc => doc.data());
     } catch (e) {
