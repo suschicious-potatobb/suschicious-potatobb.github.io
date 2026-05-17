@@ -1,5 +1,16 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+import {
+    fetchGlobalRanking,
+    saveGlobalScore,
+    getRanking,
+    saveRanking,
+    drawStartScreen,
+    drawGameScreen,
+    drawGameOverScreen,
+    drawRankList,
+    resizeCanvas,
+} from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -15,9 +26,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const firebaseOps = { collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp };
 
 // --- Multilingual Support ---
 const translations = {
@@ -47,137 +56,29 @@ const translations = {
     }
 };
 
-let currentLang = storage.getItem('sushicious_lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en');
+let currentLang = localStorage.getItem('sushicious_lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en');
 const t = (key) => translations[currentLang]?.[key] || key;
-
-// --- Game Configuration ---
-let canvasWidth, canvasHeight;
-let score = 0;
-let gameState = 'start'; // 'start', 'playing', 'gameOver'
-let globalRanking = [];
-let isLoadingRanking = false;
 
 // --- Ranking Configuration ---
 const STORAGE_KEY_ALL_TIME = 'sushicious_docking_all_time_rank';
 const STORAGE_KEY_DAILY = 'sushicious_docking_daily_rank';
 const GLOBAL_COLLECTION = 'rankings_docking';
 
-async function fetchGlobalRanking() {
-    if (isLoadingRanking) return;
-    isLoadingRanking = true;
-    try {
-        const q = query(collection(db, GLOBAL_COLLECTION), orderBy("score", "desc"), limit(3));
-        const querySnapshot = await getDocs(q);
-        globalRanking = querySnapshot.docs.map(doc => doc.data());
-    } catch (e) {
-        console.error("Error fetching ranking: ", e);
-    } finally {
-        isLoadingRanking = false;
-    }
-}
-
-async function saveGlobalScore(score) {
-    if (score <= 0) return;
-    try {
-        await addDoc(collection(db, GLOBAL_COLLECTION), {
-            score: score,
-            timestamp: serverTimestamp(),
-            userAgent: navigator.userAgent
-        });
-        fetchGlobalRanking();
-    } catch (e) {
-        console.error("Error adding document: ", e);
-    }
-}
-
-function getRanking(key) {
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : [];
-}
-
-function saveRanking(key, score) {
-    let ranking = getRanking(key);
-    const today = new Date().toLocaleDateString();
-    
-    // For daily rank, check if the data is from today
-    if (key === STORAGE_KEY_DAILY) {
-        const lastDate = localStorage.getItem(key + '_date');
-        if (lastDate !== today) {
-            ranking = [];
-            localStorage.setItem(key + '_date', today);
+function createRankingStateAdapter(scene) {
+    return {
+        get globalRanking() {
+            return scene.globalRanking;
+        },
+        set globalRanking(value) {
+            scene.globalRanking = Array.isArray(value) ? value : [];
+        },
+        get isLoadingRanking() {
+            return scene.isLoadingGlobalRanking;
+        },
+        set isLoadingRanking(value) {
+            scene.isLoadingGlobalRanking = Boolean(value);
         }
-    }
-
-    ranking.push({ score, date: today, timestamp: Date.now() });
-    ranking.sort((a, b) => b.score - a.score);
-    ranking = ranking.slice(0, 3); // Keep only top 3
-    localStorage.setItem(key, JSON.stringify(ranking));
-    
-    // Also save to Firebase if it's high enough (simplified: always send to Firebase)
-    if (key === STORAGE_KEY_ALL_TIME) {
-        saveGlobalScore(score);
-    }
-}
-
-function resize() {
-    const viewWidth = document.documentElement.clientWidth;
-    const viewHeight = document.documentElement.clientHeight;
-    
-    canvasWidth = viewWidth;
-    canvasHeight = viewHeight;
-    
-    const maxAspectRatio = 9 / 16;
-    if (viewWidth / viewHeight > maxAspectRatio) {
-        canvasWidth = Math.floor(viewHeight * maxAspectRatio);
-    }
-    
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    canvas.style.width = canvasWidth + 'px';
-    canvas.style.height = canvasHeight + 'px';
-}
-
-function drawRankList(title, list, yStart, isGlobal = false) {
-    ctx.fillStyle = '#f0f0f0';
-    ctx.font = 'bold 20px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(title, canvasWidth / 2, yStart);
-    
-    ctx.font = 'bold 18px monospace';
-    if (isGlobal && isLoadingRanking && list.length === 0) {
-        ctx.fillStyle = '#999';
-        ctx.fillText(t('loading'), canvasWidth / 2, yStart + 35);
-    } else if (list.length === 0) {
-        ctx.fillStyle = '#666';
-        ctx.fillText('-', canvasWidth / 2, yStart + 35);
-    } else {
-        list.forEach((item, i) => {
-            ctx.fillStyle = i === 0 ? '#ffd700' : (i === 1 ? '#e0e0e0' : (i === 2 ? '#cd7f32' : '#ffffff'));
-            ctx.fillText(`${i + 1}. ${item.score} ${t('pts')}`, canvasWidth / 2, yStart + 35 + (i * 28));
-        });
-    }
-}
-
-function drawStartScreen() {
-    ctx.fillStyle = '#0f0f0f';
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    
-    // Draw Border
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
-    
-    ctx.fillStyle = '#ff3e3e';
-    ctx.font = 'bold 44px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(t('game_title'), canvasWidth / 2, canvasHeight * 0.15);
-    
-    // World Ranking from Firebase
-    drawRankList(t('community_top'), globalRanking, canvasHeight * 0.35, true);
-
-    ctx.fillStyle = `rgba(240, 240, 240, ${0.7 + Math.sin(Date.now() / 300) * 0.3})`;
-    ctx.font = '22px sans-serif';
-    ctx.fillText(t('tap_to_start'), canvasWidth / 2, canvasHeight * 0.85);
+    };
 }
 
 (() => {
@@ -193,21 +94,8 @@ function drawStartScreen() {
 
     let currentZoom = 1;
 
-    function computeCanvasSize() {
-        const viewWidth = Math.max(1, document.documentElement.clientWidth || window.innerWidth || 1);
-        const viewHeight = Math.max(1, document.documentElement.clientHeight || window.innerHeight || 1);
-
-        let width = viewWidth;
-        const maxAspectRatio = 9 / 16;
-        if (viewWidth / viewHeight > maxAspectRatio) {
-            width = Math.floor(viewHeight * maxAspectRatio);
-        }
-
-        return { width: Math.max(1, width), height: Math.max(1, viewHeight) };
-    }
-
     function applyViewport(game) {
-        const { width, height } = computeCanvasSize();
+        const { canvasWidth: width, canvasHeight: height } = resizeCanvas({ canvas, maxAspectRatio: 9 / 16 });
         if (width <= 1 || height <= 1) {
             requestAnimationFrame(() => applyViewport(game));
             return;
@@ -316,7 +204,7 @@ function drawStartScreen() {
             this.restartQueued = false;
             this.scoreSubmitted = false;
             this.dangerMs = 0;
-            currentLang = storage.getItem('sushicious_lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en');
+            currentLang = localStorage.getItem('sushicious_lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en');
 
             this.started = false;
             this.controlled = null;
@@ -404,31 +292,81 @@ function drawStartScreen() {
             });
         }
 
+        getOrCreateOverlayTexture(key) {
+            if (!this._overlayTextures) this._overlayTextures = new Map();
+            const existing = this._overlayTextures.get(key);
+            if (existing) return existing;
+
+            if (this.textures.exists(key)) {
+                this.textures.remove(key);
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = GAME_WIDTH;
+            canvas.height = GAME_HEIGHT;
+            const texture = this.textures.addCanvas(key, canvas);
+            const ctx2d = canvas.getContext('2d');
+
+            const entry = { canvas, ctx: ctx2d, texture };
+            this._overlayTextures.set(key, entry);
+            return entry;
+        }
+
+        renderCommonStartOverlay() {
+            const { ctx: ctx2d, texture } = this.getOrCreateOverlayTexture('ui-start');
+            drawStartScreen({
+                ctx: ctx2d,
+                canvasWidth: GAME_WIDTH,
+                canvasHeight: GAME_HEIGHT,
+                t,
+                globalRanking: this.globalRanking,
+                isLoadingRanking: this.isLoadingGlobalRanking,
+            });
+            drawRankList({
+                ctx: ctx2d,
+                t,
+                canvasWidth: GAME_WIDTH,
+                title: t('all_time_top'),
+                list: getRanking(STORAGE_KEY_ALL_TIME),
+                yStart: GAME_HEIGHT * 0.56,
+            });
+            drawRankList({
+                ctx: ctx2d,
+                t,
+                canvasWidth: GAME_WIDTH,
+                title: t('today_top'),
+                list: getRanking(STORAGE_KEY_DAILY),
+                yStart: GAME_HEIGHT * 0.70,
+            });
+            texture.refresh();
+
+            if (!this.startOverlay || !this.startOverlay.active) {
+                this.startOverlay = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'ui-start').setOrigin(0.5);
+                this.startOverlay.setDepth(1000);
+            }
+        }
+
+        renderCommonGameOverOverlay() {
+            const { ctx: ctx2d, texture } = this.getOrCreateOverlayTexture('ui-gameover');
+            drawGameOverScreen({
+                ctx: ctx2d,
+                canvasWidth: GAME_WIDTH,
+                canvasHeight: GAME_HEIGHT,
+                t,
+                score: this.score,
+                storageKeyAllTime: STORAGE_KEY_ALL_TIME,
+                storageKeyDaily: STORAGE_KEY_DAILY,
+            });
+            texture.refresh();
+
+            if (!this.overlay || !this.overlay.active) {
+                this.overlay = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'ui-gameover').setOrigin(0.5);
+                this.overlay.setDepth(1000);
+            }
+        }
+
         showStartOverlay() {
-            const g = this.add.graphics();
-            g.fillStyle(0x0f0f0f, 0.82);
-            g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-
-            const title = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.34, 'SUSHI-Docking', {
-                fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
-                fontSize: '54px',
-                color: '#ffffff',
-                fontStyle: '900'
-            }).setOrigin(0.5);
-
-            const hint = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.52, t('tap_to_start'), {
-                fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
-                fontSize: '26px',
-                color: '#f0f0f0'
-            }).setOrigin(0.5).setAlpha(0.92);
-
-            const sub = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.59, '← Drag / →', {
-                fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
-                fontSize: '18px',
-                color: '#d4af37'
-            }).setOrigin(0.5).setAlpha(0.9);
-
-            this.startOverlay = this.add.container(0, 0, [g, title, hint, sub]);
+            this.renderCommonStartOverlay();
         }
 
         startGame() {
@@ -546,13 +484,12 @@ function drawStartScreen() {
 
             const styleSmall = {
                 fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
-                fontSize: '18px',
+                fontSize: '24px',
                 color: '#f0f0f0'
             };
 
-            this.add.text(24, 26, 'SUSHI-Docking', styleTitle).setAlpha(0.95);
-
-            this.scoreText = this.add.text(24, 68, 'Score: 0', styleSmall).setAlpha(0.95);
+            this.add.text(0, 10, 'SUSHI-Docking', styleTitle).setAlpha(0.95);
+            this.scoreText = this.add.text(0, 60, 'Score: 0', styleSmall).setAlpha(0.95);
 
             const nextLabel = this.add.text(GAME_WIDTH - 24, 40, 'Next', styleSmall).setOrigin(1, 0).setAlpha(0.85);
             nextLabel.setColor('#d4af37');
@@ -615,61 +552,34 @@ function drawStartScreen() {
             this.gameOver = true;
             this.matter.world.pause();
             this.saveRankingsOnce();
-
-            const g = this.add.graphics();
-            g.fillStyle(0x0f0f0f, 0.85);
-            g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-
-            const title = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.35, 'GAME OVER', {
-                fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
-                fontSize: '54px',
-                color: '#ffffff',
-                fontStyle: '900'
-            }).setOrigin(0.5);
-
-            const score = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.47, `${this.score}`, {
-                fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
-                fontSize: '64px',
-                color: '#d4af37',
-                fontStyle: '900'
-            }).setOrigin(0.5);
-
-            const hint = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.62, t('tap_to_retry'), {
-                fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
-                fontSize: '22px',
-                color: '#f0f0f0'
-            }).setOrigin(0.5).setAlpha(0.9);
-
-            this.overlay = this.add.container(0, 0, [g, title, score, hint]);
-            this.buildRankingsUI();
+            this.renderCommonGameOverOverlay();
         }
 
         saveRankingsOnce() {
             if (this.scoreSubmitted) return;
             this.scoreSubmitted = true;
 
-            saveRanking(STORAGE_KEY_ALL_TIME, this.score);
-            saveRanking(STORAGE_KEY_DAILY, this.score);
+            saveRanking({ key: STORAGE_KEY_ALL_TIME, score: this.score, maxEntries: 3, includeTimestamp: true });
+            saveRanking({ key: STORAGE_KEY_DAILY, score: this.score, maxEntries: 3, dailyKey: STORAGE_KEY_DAILY, includeTimestamp: true });
 
-            saveGlobalScore(this.score)
+            const state = this._rankingState || (this._rankingState = createRankingStateAdapter(this));
+            saveGlobalScore({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, score: this.score, topN: 3, state })
                 .then(() => this.refreshGlobalRanking())
                 .catch(() => {});
         }
 
         refreshGlobalRanking() {
-            if (this.isLoadingGlobalRanking) return;
-            this.isLoadingGlobalRanking = true;
-            fetchGlobalRanking()
-                .then((rows) => {
-                    this.globalRanking = Array.isArray(rows) ? rows : [];
+            const state = this._rankingState || (this._rankingState = createRankingStateAdapter(this));
+            fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state })
+                .then(() => {
+                    if (!this.started && this.startOverlay) {
+                        this.renderCommonStartOverlay();
+                    }
                 })
                 .catch(() => {
                     this.globalRanking = [];
-                })
-                .finally(() => {
-                    this.isLoadingGlobalRanking = false;
-                    if (this.gameOver && this.overlay) {
-                        this.buildRankingsUI();
+                    if (!this.started && this.startOverlay) {
+                        this.renderCommonStartOverlay();
                     }
                 });
         }
@@ -1014,12 +924,14 @@ function drawStartScreen() {
         }
     })();
 
+    const { canvasWidth: initialWidth, canvasHeight: initialHeight } = resizeCanvas({ canvas, maxAspectRatio: 9 / 16 });
+
     const config = {
         type: preferredRenderType,
         renderType: preferredRenderType,
         canvas,
-        width: computeCanvasSize().width,
-        height: computeCanvasSize().height,
+        width: initialWidth,
+        height: initialHeight,
         backgroundColor: '#0f0f0f',
         physics: {
             default: 'matter',
@@ -1032,7 +944,17 @@ function drawStartScreen() {
         scene: [MainScene]
     };
 
-    const game = new Phaser.Game(config);
+    let game;
+    try {
+        game = new Phaser.Game(config);
+    } catch (e) {
+        if (preferredRenderType === Phaser.WEBGL) {
+            const fallbackConfig = { ...config, type: Phaser.CANVAS, renderType: Phaser.CANVAS };
+            game = new Phaser.Game(fallbackConfig);
+        } else {
+            throw e;
+        }
+    }
     applyViewport(game);
     setTimeout(() => applyViewport(game), 0);
     window.addEventListener('resize', () => setTimeout(() => applyViewport(game), 100));
