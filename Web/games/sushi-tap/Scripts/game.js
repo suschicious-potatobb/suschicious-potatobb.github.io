@@ -1,6 +1,19 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { fetchGlobalRanking, saveGlobalScore, getRanking, saveRanking, resizeCanvas, drawStartScreen, drawGameScreen, drawGameOverScreen } from "../../shared/Scripts/game-common.js";
+import {
+    fetchGlobalRanking,
+    saveGlobalScore,
+    getRanking,
+    saveRanking,
+    resizeCanvas,
+    drawStartScreen,
+    drawGameScreen,
+    drawGameOverScreen,
+    fillRoundRect,
+    getCanvasPointFromEvent,
+    createLangState,
+    createParentGameStateNotifier
+} from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
 const firebaseConfig = { 
@@ -49,8 +62,8 @@ const translations = {
     }
 };
 
-let currentLang = localStorage.getItem('sushicious_lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en');
-const t = (key) => translations[currentLang][key] || key;
+const langState = createLangState({ translations, defaultLang: 'en' });
+const t = langState.t;
 
 // --- Game Configuration ---
 let canvasWidth, canvasHeight;
@@ -75,28 +88,6 @@ function applyResize() {
     const size = resizeCanvas({ canvas });
     canvasWidth = size.canvasWidth;
     canvasHeight = size.canvasHeight;
-}
-
-// --- Drawing Helpers ---
-function drawRoundedRect(ctx, x, y, width, height, radius) {
-    if (ctx.roundRect) {
-        ctx.beginPath();
-        ctx.roundRect(x, y, width, height, radius);
-        ctx.fill();
-    } else {
-        ctx.beginPath();
-        ctx.moveTo(x + radius, y);
-        ctx.lineTo(x + width - radius, y);
-        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-        ctx.lineTo(x + width, y + height - radius);
-        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-        ctx.lineTo(x + radius, y + height);
-        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-        ctx.lineTo(x, y + radius);
-        ctx.quadraticCurveTo(x, y, x + radius, y);
-        ctx.closePath();
-        ctx.fill();
-    }
 }
 
 function update() {
@@ -146,18 +137,12 @@ function update() {
     }
 }
 
-let lastNotifiedState = '';
-function notifyParentState() {
-    if (gameState === lastNotifiedState) return;
-    const message = gameState === 'playing' ? 'gameState:playing' : 'gameState:not_playing';
-    window.parent.postMessage(message, '*');
-    lastNotifiedState = gameState;
-}
+const notifyParentState = createParentGameStateNotifier();
 
 function gameLoop() {
     update();
-    notifyParentState();
-    currentLang = localStorage.getItem('sushicious_lang') || 'en';
+    notifyParentState(gameState);
+    langState.sync();
     if (gameState === 'start') {
         drawStartScreen({
             ctx,
@@ -188,7 +173,7 @@ function gameLoop() {
                     ctx.lineWidth = 1;
                     ctx.stroke();
                     ctx.fillStyle = '#ff3e3e';
-                    drawRoundedRect(ctx, target.x - target.size / 2, target.y - target.size / 4, target.size, target.size / 2, 8);
+                    fillRoundRect(ctx, target.x - target.size / 2, target.y - target.size / 4, target.size, target.size / 2, 8);
                 });
             }
         });
@@ -215,22 +200,9 @@ function handleTap(event) {
     if (event.type === 'touchstart' && event.cancelable) {
         event.preventDefault();
     }
-    const rect = canvas.getBoundingClientRect();
-    let clientX, clientY;
-    if (event.touches && event.touches.length > 0) {
-        clientX = event.touches[0].clientX;
-        clientY = event.touches[0].clientY;
-    } else if (event.changedTouches && event.changedTouches.length > 0) {
-        clientX = event.changedTouches[0].clientX;
-        clientY = event.changedTouches[0].clientY;
-    } else {
-        clientX = event.clientX;
-        clientY = event.clientY;
-    }
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const tapX = (clientX - rect.left) * scaleX;
-    const tapY = (clientY - rect.top) * scaleY;
+    const p = getCanvasPointFromEvent({ canvas, event });
+    const tapX = p.x;
+    const tapY = p.y;
 
     if (gameState === 'start' && canChangeState) {
         gameState = 'playing';

@@ -44,6 +44,85 @@ export function getRanking(key) {
     return data ? JSON.parse(data) : [];
 }
 
+export function fillRoundRect(ctx, x, y, width, height, radius = 0) {
+    if (!ctx) return;
+    const r = Math.max(0, Math.min(radius, Math.min(width, height) / 2));
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(x, y, width, height, r);
+    } else {
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + width - r, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+        ctx.lineTo(x + width, y + height - r);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+        ctx.lineTo(x + r, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+    }
+    ctx.fill();
+}
+
+export function getCanvasPointFromEvent({ canvas, event } = {}) {
+    if (!canvas || !event) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    let clientX;
+    let clientY;
+
+    if (event.touches && event.touches.length > 0) {
+        clientX = event.touches[0].clientX;
+        clientY = event.touches[0].clientY;
+    } else if (event.changedTouches && event.changedTouches.length > 0) {
+        clientX = event.changedTouches[0].clientX;
+        clientY = event.changedTouches[0].clientY;
+    } else {
+        clientX = event.clientX;
+        clientY = event.clientY;
+    }
+
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+    };
+}
+
+export function createLangState({
+    translations,
+    storageKey = 'sushicious_lang',
+    defaultLang = 'en',
+    navigatorLang = (typeof navigator !== 'undefined' ? navigator.language : '')
+} = {}) {
+    let currentLang = localStorage.getItem(storageKey) || (navigatorLang?.startsWith('ja') ? 'ja' : defaultLang);
+
+    const t = (key) => translations?.[currentLang]?.[key] ?? translations?.[defaultLang]?.[key] ?? key;
+    const sync = () => {
+        const portalLang = localStorage.getItem(storageKey);
+        if (portalLang && portalLang !== currentLang) currentLang = portalLang;
+        return currentLang;
+    };
+    const getLang = () => currentLang;
+
+    return { t, sync, getLang };
+}
+
+export function createParentGameStateNotifier({
+    parent = (typeof window !== 'undefined' ? window.parent : null),
+    targetOrigin = '*',
+    getMessage = (gameState) => (gameState === 'playing' ? 'gameState:playing' : 'gameState:not_playing')
+} = {}) {
+    let lastMessage = '';
+    return (gameState) => {
+        const message = getMessage(gameState);
+        if (message === lastMessage) return;
+        if (parent && typeof parent.postMessage === 'function') parent.postMessage(message, targetOrigin);
+        lastMessage = message;
+    };
+}
+
 export function saveRanking({
     key,
     score,
@@ -130,7 +209,7 @@ export function drawRankList({ ctx, t, canvasWidth, title, list, yStart, isGloba
     }
 }
 
-export function drawStartScreen({ ctx, canvasWidth, canvasHeight, t, globalRanking = [], isLoadingRanking = false, subtitleText } = {}) {
+export function drawStartScreen({ ctx, canvasWidth, canvasHeight, t, globalRanking = [], isLoadingRanking = false, subtitleText, sections } = {}) {
     if (!ctx) return;
 
     ctx.fillStyle = '#0f0f0f';
@@ -153,27 +232,43 @@ export function drawStartScreen({ ctx, canvasWidth, canvasHeight, t, globalRanki
         ctx.fillText(subtitleText, canvasWidth / 2, canvasHeight * 0.23);
     }
 
-    drawRankList({
-        ctx,
-        t: translate,
-        canvasWidth,
-        title: translate('community_top'),
-        list: globalRanking,
-        yStart: canvasHeight * 0.35,
-        isGlobal: true,
-        isLoadingRanking
-    });
+    if (Array.isArray(sections) && sections.length > 0) {
+        for (const section of sections) {
+            if (!section) continue;
+            drawRankList({
+                ctx,
+                t: translate,
+                canvasWidth,
+                title: section.title,
+                list: section.list || [],
+                yStart: section.yStart,
+                isGlobal: Boolean(section.isGlobal),
+                isLoadingRanking: Boolean(section.isLoadingRanking)
+            });
+        }
+    } else {
+        drawRankList({
+            ctx,
+            t: translate,
+            canvasWidth,
+            title: translate('community_top'),
+            list: globalRanking,
+            yStart: canvasHeight * 0.35,
+            isGlobal: true,
+            isLoadingRanking
+        });
+    }
 
     ctx.fillStyle = `rgba(240, 240, 240, ${0.7 + Math.sin(Date.now() / 300) * 0.3})`;
     ctx.font = '22px sans-serif';
     ctx.fillText(translate('tap_to_start'), canvasWidth / 2, canvasHeight * 0.85);
 }
 
-export function drawGameScreen({ ctx, canvasWidth, canvasHeight, t, score, drawPlayfield, showDefaultScore = true } = {}) {
+export function drawGameScreen({ ctx, canvasWidth, canvasHeight, t, score, drawPlayfield, showDefaultScore = true, backgroundColor = '#121212' } = {}) {
     if (!ctx) return;
     const translate = typeof t === 'function' ? t : (key) => key;
 
-    ctx.fillStyle = '#121212';
+    ctx.fillStyle = backgroundColor;
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
     if (typeof drawPlayfield === 'function') {

@@ -5,6 +5,10 @@ import {
     saveGlobalScore,
     getRanking,
     saveRanking,
+    fillRoundRect,
+    getCanvasPointFromEvent,
+    createLangState,
+    createParentGameStateNotifier,
     resizeCanvas,
     drawRankList,
     drawStartScreen,
@@ -59,8 +63,8 @@ const translations = {
     }
 };
 
-let currentLang = localStorage.getItem('sushicious_lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en');
-const t = (key) => translations[currentLang][key] || key;
+const langState = createLangState({ translations, defaultLang: 'en' });
+const t = langState.t;
 
 // --- Game Configuration ---
 let canvasWidth, canvasHeight;
@@ -190,9 +194,7 @@ function draw() {
                 const y = gridYStart + row * cellStep;
 
                 ctx.fillStyle = card.isMatched ? 'rgba(255, 255, 255, 0.1)' : (card.isFlipped ? '#fff' : '#e63946');
-                ctx.beginPath();
-                ctx.roundRect(x, y, cardSize, cardSize, 8);
-                ctx.fill();
+                fillRoundRect(ctx, x, y, cardSize, cardSize, 8);
 
                 if (card.isFlipped || card.isMatched) {
                     ctx.font = `${cardSize * 0.6}px Arial`;
@@ -223,23 +225,14 @@ function getGridLayout() {
 }
 
 
-let lastNotifiedState = '';
-function notifyParentState() {
-    if (gameState === lastNotifiedState) return;
-    const message = gameState === 'playing' ? 'gameState:playing' : 'gameState:not_playing';
-    window.parent.postMessage(message, '*');
-    lastNotifiedState = gameState;
-}
+const notifyParentState = createParentGameStateNotifier();
 
 function gameLoop() {
-    const portalLang = localStorage.getItem('sushicious_lang');
-    if (portalLang && portalLang !== currentLang) {
-        currentLang = portalLang;
-    }
+    langState.sync();
 
     update();
     draw();
-    notifyParentState();
+    notifyParentState(gameState);
     requestAnimationFrame(gameLoop);
 }
 
@@ -304,8 +297,8 @@ canvas.addEventListener('mousedown', (e) => {
         initGrid();
         fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
     } else {
-        const rect = canvas.getBoundingClientRect();
-        handleCardClick(e.clientX - rect.left, e.clientY - rect.top);
+        const p = getCanvasPointFromEvent({ canvas, event: e });
+        handleCardClick(p.x, p.y);
     }
 });
 
@@ -318,8 +311,8 @@ canvas.addEventListener('touchstart', (e) => {
         initGrid();
         fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
     } else {
-        const rect = canvas.getBoundingClientRect();
-        handleCardClick(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
+        const p = getCanvasPointFromEvent({ canvas, event: e });
+        handleCardClick(p.x, p.y);
     }
 }, { passive: false });
 

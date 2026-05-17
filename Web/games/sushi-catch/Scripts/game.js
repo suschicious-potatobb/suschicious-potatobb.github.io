@@ -1,6 +1,19 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { fetchGlobalRanking, saveGlobalScore, getRanking, resizeCanvas } from "../../shared/Scripts/game-common.js";
+import {
+    fetchGlobalRanking,
+    saveGlobalScore,
+    getRanking,
+    saveRanking,
+    resizeCanvas,
+    drawStartScreen,
+    drawGameScreen,
+    drawGameOverScreen,
+    fillRoundRect,
+    getCanvasPointFromEvent,
+    createLangState,
+    createParentGameStateNotifier
+} from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
 const firebaseConfig = { 
@@ -49,8 +62,8 @@ const translations = {
     }
 };
 
-let currentLang = localStorage.getItem('sushicious_lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en');
-const t = (key) => translations[currentLang][key] || key;
+const langState = createLangState({ translations, defaultLang: 'en' });
+const t = langState.t;
 
 // --- Game Configuration ---
 let canvasWidth, canvasHeight;
@@ -71,18 +84,6 @@ const sushiTypes = [
     { name: 'ebi', color: '#ffa07a', textColor: '#fff', label: '🦐' },
     { name: 'egg', color: '#ffd700', textColor: '#000', label: '🍳' }
 ];
-
-function saveRanking(key, score) {
-    let ranking = getRanking(key);
-    ranking.push({ score, date: new Date().toLocaleDateString() });
-    ranking.sort((a, b) => b.score - a.score);
-    localStorage.setItem(key, JSON.stringify(ranking.slice(0, 3)));
-    
-    // Explicitly call saveGlobalScore when local ranking is saved
-    if (key === STORAGE_KEY_ALL_TIME) {
-        saveGlobalScore({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, score, topN: 3, state: rankingState });
-    }
-}
 
 function applyResize() {
     const size = resizeCanvas({ canvas });
@@ -129,113 +130,108 @@ function update() {
             sushis.splice(i, 1);
             if (lives <= 0) {
                 gameState = 'gameOver';
-                saveRanking(STORAGE_KEY_ALL_TIME, score);
+                saveRanking({
+                    key: STORAGE_KEY_ALL_TIME,
+                    score,
+                    maxEntries: 3,
+                    includeTimestamp: true,
+                    onSave: () => {
+                        saveGlobalScore({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, score, topN: 3, state: rankingState });
+                    }
+                });
             }
         }
     }
 }
 
 function draw() {
-    ctx.fillStyle = '#0f0f0f';
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-    // Draw plate
-    ctx.fillStyle = '#f0f0f0';
-    ctx.beginPath();
-    ctx.roundRect(plate.x, plate.y, plate.width, plate.height, 5);
-    ctx.fill();
-
-    // Draw sushis
-    sushis.forEach(s => {
-        ctx.font = `${s.size}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(s.type.label, s.x + s.size / 2, s.y + s.size / 2);
-    });
-
-    // Draw UI
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 20px Inter, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`${t('score')}: ${score}`, 20, 40);
-    ctx.textAlign = 'right';
-    ctx.fillText(`${t('lives')}: ${'❤️'.repeat(lives)}`, canvasWidth - 20, 40);
-
     if (gameState === 'start') {
-        drawOverlay(t('game_title'), t('tap_to_start'));
-    } else if (gameState === 'gameOver') {
-        drawGameOver();
+        drawStartScreen({
+            ctx,
+            canvasWidth,
+            canvasHeight,
+            t,
+            subtitleText: t('tap_to_start'),
+            sections: [
+                {
+                    title: t('community_top'),
+                    list: rankingState.globalRanking,
+                    yStart: canvasHeight * 0.35,
+                    isGlobal: true,
+                    isLoadingRanking: rankingState.isLoadingRanking
+                },
+                {
+                    title: t('all_time_top'),
+                    list: getRanking(STORAGE_KEY_ALL_TIME),
+                    yStart: canvasHeight * 0.70
+                }
+            ]
+        });
+        return;
     }
-}
-
-function drawOverlay(title, subtitle) {
-    ctx.fillStyle = 'rgba(0,0,0,0.8)';
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    
-    ctx.fillStyle = '#ff3e3e';
-    ctx.font = 'bold 40px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(title, canvasWidth/2, canvasHeight/2 - 40);
-    
-    ctx.fillStyle = '#fff';
-    ctx.font = '20px Inter, sans-serif';
-    ctx.fillText(subtitle, canvasWidth/2, canvasHeight/2 + 20);
-
-    if (rankingState.isLoadingRanking) {
-        ctx.font = '16px Inter, sans-serif';
-        ctx.fillText(t('loading'), canvasWidth/2, canvasHeight/2 + 150);
-    } else {
-        drawRankings();
+    if (gameState === 'gameOver') {
+        drawGameOverScreen({
+            ctx,
+            canvasWidth,
+            canvasHeight,
+            t,
+            score,
+            showScore: false,
+            sections: [
+                {
+                    title: t('community_top'),
+                    list: rankingState.globalRanking,
+                    yStart: canvasHeight * 0.45,
+                    isGlobal: true,
+                    isLoadingRanking: rankingState.isLoadingRanking
+                },
+                {
+                    title: t('all_time_top'),
+                    list: getRanking(STORAGE_KEY_ALL_TIME),
+                    yStart: canvasHeight * 0.70
+                }
+            ]
+        });
+        return;
     }
-}
 
-function drawRankings() {
-    let y = canvasHeight / 2 + 80;
-    ctx.font = 'bold 16px Inter, sans-serif';
-    ctx.fillStyle = '#ffcc00';
-    ctx.fillText(t('community_top'), canvasWidth/2, y);
-    
-    ctx.font = '14px Inter, sans-serif';
-    ctx.fillStyle = '#fff';
-    rankingState.globalRanking.forEach((r, i) => {
-        ctx.fillText(`${i+1}. ${r.score}${t('pts')}`, canvasWidth/2, y + 25 + i*20);
+    drawGameScreen({
+        ctx,
+        canvasWidth,
+        canvasHeight,
+        t,
+        score,
+        showDefaultScore: false,
+        backgroundColor: '#0f0f0f',
+        drawPlayfield: () => {
+            ctx.fillStyle = '#f0f0f0';
+            fillRoundRect(ctx, plate.x, plate.y, plate.width, plate.height, 5);
+
+            sushis.forEach(s => {
+                ctx.font = `${s.size}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#fff';
+                ctx.fillText(s.type.label, s.x + s.size / 2, s.y + s.size / 2);
+            });
+
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 20px Inter, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${t('score')}: ${score}`, 20, 40);
+            ctx.textAlign = 'right';
+            ctx.fillText(`${t('lives')}: ${'❤️'.repeat(lives)}`, canvasWidth - 20, 40);
+        }
     });
-
-    y += 110;
-    ctx.font = 'bold 16px Inter, sans-serif';
-    ctx.fillStyle = '#ffcc00';
-    ctx.fillText(t('all_time_top'), canvasWidth/2, y);
-    
-    const localBest = getRanking(STORAGE_KEY_ALL_TIME);
-    ctx.font = '14px Inter, sans-serif';
-    ctx.fillStyle = '#fff';
-    localBest.forEach((r, i) => {
-        ctx.fillText(`${i+1}. ${r.score}${t('pts')}`, canvasWidth/2, y + 25 + i*20);
-    });
 }
-
-function drawGameOver() {
-    drawOverlay(t('game_over'), t('tap_to_retry'));
-}
-
-let lastNotifiedState = '';
-function notifyParentState() {
-    if (gameState === lastNotifiedState) return;
-    const message = gameState === 'playing' ? 'gameState:playing' : 'gameState:not_playing';
-    window.parent.postMessage(message, '*');
-    lastNotifiedState = gameState;
-}
+const notifyParentState = createParentGameStateNotifier();
 
 function gameLoop() {
-    // Sync language from portal
-    const portalLang = localStorage.getItem('sushicious_lang');
-    if (portalLang && portalLang !== currentLang) {
-        currentLang = portalLang;
-    }
+    langState.sync();
 
     update();
     draw();
-    notifyParentState();
+    notifyParentState(gameState);
     requestAnimationFrame(gameLoop);
 }
 
@@ -245,10 +241,9 @@ window.addEventListener('resize', () => {
 });
 
 let isInputActive = false;
-function handleInput(clientX) {
-    const rect = canvas.getBoundingClientRect();
-    const x = clientX - rect.left;
-    plate.x = Math.max(0, Math.min(x - plate.width / 2, canvasWidth - plate.width));
+function handleInput(event) {
+    const p = getCanvasPointFromEvent({ canvas, event });
+    plate.x = Math.max(0, Math.min(p.x - plate.width / 2, canvasWidth - plate.width));
     
     if (gameState === 'start' && isInputActive) {
         gameState = 'playing';
@@ -264,13 +259,13 @@ canvas.addEventListener('mousedown', (e) => {
         sushis = [];
         fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
     } else {
-        handleInput(e.clientX);
+        handleInput(e);
     }
 });
 
 canvas.addEventListener('mousemove', (e) => {
     if (isInputActive || gameState === 'playing') {
-        handleInput(e.clientX);
+        handleInput(e);
     }
 });
 
@@ -287,14 +282,15 @@ canvas.addEventListener('touchstart', (e) => {
         sushis = [];
         fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
     } else {
-        handleInput(e.touches[0].clientX);
+        if (e.cancelable) e.preventDefault();
+        handleInput(e);
     }
 }, { passive: false });
 
 canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
     if (isInputActive || gameState === 'playing') {
-        handleInput(e.touches[0].clientX);
+        handleInput(e);
     }
 }, { passive: false });
 
