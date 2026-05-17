@@ -133,11 +133,11 @@ function createRankingStateAdapter(scene) {
     const CONTROLLED_FALL_SPEED = 4.3;
 
     const TYPES = [
-        { id: 'shrimp', emoji: '🦐', radius: 36, weight: 389, score: 10 },
-        { id: 'puffer', emoji: '🐡', radius: 50, weight: 100, score: 25 },
+        { id: 'shrimp', emoji: '🦐', radius: 26, weight: 389, score: 10 },
+        { id: 'puffer', emoji: '🐡', radius: 45, weight: 100, score: 25 },
         { id: 'fish', emoji: '🐟', radius: 70, weight: 10, score: 60 },
-        { id: 'sprout', emoji: '🌱', radius: 36, weight: 389, score: 10 },
-        { id: 'ricePlant', emoji: '🌾', radius: 50, weight: 100, score: 25 },
+        { id: 'sprout', emoji: '🌱', radius: 26, weight: 389, score: 10 },
+        { id: 'ricePlant', emoji: '🌾', radius: 45, weight: 100, score: 25 },
         { id: 'rice', emoji: '🍚', radius: 70, weight: 10, score: 60 },
         { id: 'sushi', emoji: '🍣', radius: 100, weight: 2, score: 200 }
     ];
