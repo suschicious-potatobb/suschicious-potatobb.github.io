@@ -15,6 +15,24 @@ import {
     resetGame,
     endGame,
 } from "../../shared/Scripts/game-common.js";
+import {
+    RANKING_MAX_ENTRIES,
+    RANKING_TOP_N,
+    TARGET_ARC_RADIUS_DIVISOR,
+    TARGET_BASE_SPEED,
+    TARGET_BODY_CORNER_RADIUS,
+    TARGET_CULL_Y_MARGIN,
+    TARGET_MAX_COUNT,
+    TARGET_MAX_SPEED,
+    TARGET_MISS_Y_MARGIN,
+    TARGET_SHADOW_Y_OFFSET,
+    TARGET_SIZE_MIN,
+    TARGET_SIZE_RANGE,
+    TARGET_SPAWN_PROBABILITY_PER_FRAME,
+    TARGET_SPEED_INCREASE_PER_SECOND,
+    TARGET_STROKE_WIDTH,
+    RESIZE_DEBOUNCE_MS,
+} from "./constants.js";
 
 // --- Firebase Configuration ---
 const firebaseConfig = { 
@@ -79,10 +97,7 @@ const GLOBAL_COLLECTION = 'rankings_tap';
 
 // --- Game Objects ---
 let targets = [];
-const baseTargetSpeed = 3;
-const targetSpeedIncreasePerSecond = 0.02;
-const maxTargetSpeed = 30;
-let targetSpeed = baseTargetSpeed;
+let targetSpeed = TARGET_BASE_SPEED;
 let playStartTimeMs = 0;
 
 function applyResize() {
@@ -95,7 +110,7 @@ function startPlaying(now) {
     gameState = 'playing';
     score = 0;
     targets = [];
-    targetSpeed = baseTargetSpeed;
+    targetSpeed = TARGET_BASE_SPEED;
     playStartTimeMs = performance.now();
     lastStateChange = now;
 }
@@ -103,19 +118,19 @@ function startPlaying(now) {
 function update() {
     if (gameState !== 'playing') return;
     const elapsedSeconds = (performance.now() - playStartTimeMs) / 1000;
-    targetSpeed = Math.min(baseTargetSpeed + elapsedSeconds * targetSpeedIncreasePerSecond, maxTargetSpeed);
+    targetSpeed = Math.min(TARGET_BASE_SPEED + elapsedSeconds * TARGET_SPEED_INCREASE_PER_SECOND, TARGET_MAX_SPEED);
     targets.forEach(target => {
         target.y += targetSpeed;
     });
-    if (Math.random() < 0.04) {
-        const size = 50 + Math.random() * 30;
+    if (Math.random() < TARGET_SPAWN_PROBABILITY_PER_FRAME) {
+        const size = TARGET_SIZE_MIN + Math.random() * TARGET_SIZE_RANGE;
         targets.push({
             x: size/2 + Math.random() * (canvasWidth - size),
             y: -size,
             size: size
         });
     }
-    if (targets.some(t => t.y > canvasHeight + 50)) {
+    if (targets.some(t => t.y > canvasHeight + TARGET_MISS_Y_MARGIN)) {
         const changed = endGame({
             getGameState: () => gameState,
             setGameState: (next) => { gameState = next; },
@@ -124,21 +139,21 @@ function update() {
                 storageKeyAllTime: STORAGE_KEY_ALL_TIME,
                 storageKeyDaily: STORAGE_KEY_DAILY,
                 dailyKey: STORAGE_KEY_DAILY,
-                maxEntries: 3,
+                maxEntries: RANKING_MAX_ENTRIES,
                 includeTimestamp: true,
                 global: {
                     db,
                     firebase: firebaseOps,
                     collectionName: GLOBAL_COLLECTION,
-                    topN: 3,
+                    topN: RANKING_TOP_N,
                     state: rankingState
                 }
             })
         });
         if (changed) lastStateChange = Date.now;
     }
-    if (targets.length > 50) {
-        targets = targets.filter(t => t.y < canvasHeight + 100);
+    if (targets.length > TARGET_MAX_COUNT) {
+        targets = targets.filter(t => t.y < canvasHeight + TARGET_CULL_Y_MARGIN);
     }
 }
 
@@ -169,16 +184,16 @@ function gameLoop() {
                     ctx.fillStyle = '#ffffff';
                     ctx.beginPath();
                     if (ctx.ellipse) {
-                        ctx.ellipse(target.x, target.y + 10, target.size / 2, target.size / 3, 0, 0, Math.PI * 2);
+                        ctx.ellipse(target.x, target.y + TARGET_SHADOW_Y_OFFSET, target.size / 2, target.size / 3, 0, 0, Math.PI * 2);
                     } else {
-                        ctx.arc(target.x, target.y + 10, target.size / 2.5, 0, Math.PI * 2);
+                        ctx.arc(target.x, target.y + TARGET_SHADOW_Y_OFFSET, target.size / TARGET_ARC_RADIUS_DIVISOR, 0, Math.PI * 2);
                     }
                     ctx.fill();
                     ctx.strokeStyle = '#e0e0e0';
-                    ctx.lineWidth = 1;
+                    ctx.lineWidth = TARGET_STROKE_WIDTH;
                     ctx.stroke();
                     ctx.fillStyle = '#ff3e3e';
-                    fillRoundRect(ctx, target.x - target.size / 2, target.y - target.size / 4, target.size, target.size / 2, 8);
+                    fillRoundRect(ctx, target.x - target.size / 2, target.y - target.size / 4, target.size, target.size / 2, TARGET_BODY_CORNER_RADIUS);
                 });
             }
         });
@@ -228,7 +243,7 @@ function handleTap({ x, y } = {}) {
                 db,
                 firebase: firebaseOps,
                 collectionName: GLOBAL_COLLECTION,
-                topN: 3,
+                topN: RANKING_TOP_N,
                 state: rankingState
             })
         });
@@ -236,7 +251,7 @@ function handleTap({ x, y } = {}) {
 }
 
 window.addEventListener('resize', () => {
-    setTimeout(applyResize, 100);
+    setTimeout(applyResize, RESIZE_DEBOUNCE_MS);
 }, false);
 bindCanvasPointerStart({
     canvas,
@@ -244,5 +259,5 @@ bindCanvasPointerStart({
 });
 
 applyResize();
-fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
+fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: RANKING_TOP_N, state: rankingState });
 gameLoop();

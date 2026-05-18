@@ -1,3 +1,19 @@
+import {
+    FONT_DEFAULT_SCORE,
+    FONT_HUD,
+    FONT_GAME_OVER_SCORE,
+    FONT_GAME_OVER_SCORE_LABEL,
+    FONT_GAME_OVER_TAP_TO_RETRY,
+    FONT_GAME_OVER_TITLE,
+    FONT_RANK_ITEM,
+    FONT_RANK_TITLE,
+    FONT_START_SUBTITLE,
+    FONT_START_TAP_TO_START,
+    FONT_START_TITLE,
+    HUD_PADDING_X,
+    HUD_TOP_Y,
+} from "./constants-common.js";
+
 export async function fetchGlobalRanking({ db, firebase, collectionName, topN = 3, state } = {}) {
     // Firestoreからグローバルランキングを取得する
     if (!db || !firebase || !collectionName) return [];
@@ -304,11 +320,11 @@ export function drawRankList({ ctx, t, canvasWidth, title, list, yStart, isGloba
     const translate = toTranslator(t);
 
     ctx.fillStyle = '#f0f0f0';
-    ctx.font = 'bold 20px sans-serif';
+    ctx.font = FONT_RANK_TITLE;
     ctx.textAlign = 'center';
     ctx.fillText(title, canvasWidth / 2, yStart);
 
-    ctx.font = 'bold 18px monospace';
+    ctx.font = FONT_RANK_ITEM;
     if (isGlobal && isLoadingRanking && safeList.length === 0) {
         ctx.fillStyle = '#999';
         ctx.fillText(translate('loading'), canvasWidth / 2, yStart + 35);
@@ -340,13 +356,13 @@ export function drawStartScreen({ ctx, canvasWidth, canvasHeight, t, globalRanki
     ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
 
     ctx.fillStyle = '#ff3e3e';
-    ctx.font = 'bold 44px sans-serif';
+    ctx.font = FONT_START_TITLE;
     ctx.textAlign = 'center';
     ctx.fillText(translate('game_title'), canvasWidth / 2, canvasHeight * 0.15);
 
     if (subtitleText) {
         ctx.fillStyle = '#f0f0f0';
-        ctx.font = '22px sans-serif';
+        ctx.font = FONT_START_SUBTITLE;
         ctx.fillText(subtitleText, canvasWidth / 2, canvasHeight * 0.23);
     }
 
@@ -364,11 +380,24 @@ export function drawStartScreen({ ctx, canvasWidth, canvasHeight, t, globalRanki
     }
 
     ctx.fillStyle = `rgba(240, 240, 240, ${0.7 + Math.sin(Date.now() / 300) * 0.3})`;
-    ctx.font = '22px sans-serif';
+    ctx.font = FONT_START_TAP_TO_START;
     ctx.fillText(translate('tap_to_start'), canvasWidth / 2, canvasHeight * 0.85);
 }
 
-export function drawGameScreen({ ctx, canvasWidth, canvasHeight, t, score, drawPlayfield, showDefaultScore = true, backgroundColor = '#121212' } = {}) {
+export function drawGameScreen({
+    ctx,
+    canvasWidth,
+    canvasHeight,
+    t,
+    score,
+    drawPlayfield,
+    showDefaultScore = true,
+    hudLeftText,
+    hudRightText,
+    hudFont = FONT_HUD,
+    hudTopY = HUD_TOP_Y,
+    backgroundColor = '#121212'
+} = {}) {
     // プレイ中画面（背景＋プレイフィールド＋スコア）を描画する
     if (!ctx) return;
     const translate = toTranslator(t);
@@ -380,11 +409,20 @@ export function drawGameScreen({ ctx, canvasWidth, canvasHeight, t, score, drawP
         drawPlayfield({ ctx, canvasWidth, canvasHeight });
     }
 
-    if (!showDefaultScore) return;
+    const leftText = hudLeftText ?? (showDefaultScore ? `${translate('score')}: ${score}` : null);
+    const rightText = hudRightText ?? null;
+    if (!leftText && !rightText) return;
+
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 28px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`${translate('score')}: ${score}`, 15, 45);
+    ctx.font = hudFont ?? FONT_DEFAULT_SCORE;
+    if (leftText) {
+        ctx.textAlign = 'left';
+        ctx.fillText(leftText, HUD_PADDING_X, hudTopY);
+    }
+    if (rightText) {
+        ctx.textAlign = 'right';
+        ctx.fillText(rightText, canvasWidth - HUD_PADDING_X, hudTopY);
+    }
 }
 
 export function drawGameOverScreen({
@@ -407,15 +445,15 @@ export function drawGameOverScreen({
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 40px sans-serif';
+    ctx.font = FONT_GAME_OVER_TITLE;
     ctx.textAlign = 'center';
     ctx.fillText(translate('game_over'), canvasWidth / 2, canvasHeight * 0.15);
 
     if (showScore) {
         ctx.fillStyle = '#ffcc00';
-        ctx.font = 'bold 54px sans-serif';
+        ctx.font = FONT_GAME_OVER_SCORE;
         ctx.fillText(score, canvasWidth / 2, canvasHeight * 0.28);
-        ctx.font = 'bold 20px sans-serif';
+        ctx.font = FONT_GAME_OVER_SCORE_LABEL;
         ctx.fillText(translate('score').toUpperCase(), canvasWidth / 2, canvasHeight * 0.33);
     }
 
@@ -442,6 +480,6 @@ export function drawGameOverScreen({
     }
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '20px sans-serif';
+    ctx.font = FONT_GAME_OVER_TAP_TO_RETRY;
     ctx.fillText(translate('tap_to_retry'), canvasWidth / 2, canvasHeight * 0.92);
 }

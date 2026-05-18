@@ -16,6 +16,26 @@ import {
     resetGame,
     endGame,
 } from "../../shared/Scripts/game-common.js";
+import {
+    BONUS_TIME_SECONDS,
+    CARD_CORNER_RADIUS,
+    CARD_EMOJI_FONT_SCALE,
+    GAME_OVER_ALL_TIME_Y_RATIO,
+    GAME_OVER_GLOBAL_Y_RATIO,
+    GRID_PADDING,
+    GRID_SIZE,
+    GRID_Y_OFFSET,
+    INITIAL_TIME_SECONDS,
+    MISMATCH_FLIP_BACK_DELAY_MS,
+    PLAYFIELD_BORDER_COLOR,
+    PLAYFIELD_BORDER_LINE_WIDTH,
+    RANKING_MAX_ENTRIES,
+    RANKING_TOP_N,
+    RESIZE_DEBOUNCE_MS,
+    SCORE_PER_MATCH,
+    SUSHI_EMOJIS,
+    TIME_DECREMENT_PER_TICK,
+} from "./constants.js";
 
 // --- Firebase Configuration ---
 const firebaseConfig = { 
@@ -70,7 +90,7 @@ const t = langState.t;
 // --- Game Configuration ---
 let canvasWidth, canvasHeight;
 let score = 0;
-let timeLeft = 30;
+let timeLeft = INITIAL_TIME_SECONDS;
 let gameState = 'start'; // 'start', 'playing', 'gameOver'
 const rankingState = { globalRanking: [], isLoadingRanking: false };
 
@@ -80,10 +100,8 @@ const STORAGE_KEY_DAILY = 'sushicious_daily_rank';
 const GLOBAL_COLLECTION = 'rankings_match';
 
 // --- Puzzle Logic ---
-const GRID_SIZE = 4;
 let cards = [];
 let selectedCards = [];
-const sushiEmojis = ['🍣', '🦐', '🍳', '🐙', '🥢', '🍵', '🍶', '🍱'];
 
 function applyResize() {
     const size = resizeCanvas({ canvas });
@@ -92,7 +110,7 @@ function applyResize() {
 }
 
 function initGrid() {
-    const pairs = [...sushiEmojis, ...sushiEmojis];
+    const pairs = [...SUSHI_EMOJIS, ...SUSHI_EMOJIS];
     pairs.sort(() => Math.random() - 0.5);
     cards = pairs.map((emoji, index) => ({
         id: index,
@@ -106,7 +124,7 @@ function update() {
     if (gameState !== 'playing') return;
 
     if (timeLeft > 0) {
-        timeLeft -= 1/60;
+        timeLeft -= TIME_DECREMENT_PER_TICK;
     } else {
         timeLeft = 0;
         endGame({
@@ -117,13 +135,13 @@ function update() {
                 storageKeyAllTime: STORAGE_KEY_ALL_TIME,
                 storageKeyDaily: STORAGE_KEY_DAILY,
                 dailyKey: STORAGE_KEY_DAILY,
-                maxEntries: 3,
+                maxEntries: RANKING_MAX_ENTRIES,
                 includeTimestamp: true,
                 global: {
                     db,
                     firebase: firebaseOps,
                     collectionName: GLOBAL_COLLECTION,
-                    topN: 3,
+                    topN: RANKING_TOP_N,
                     state: rankingState
                 }
             })
@@ -156,7 +174,7 @@ function draw() {
                 {
                     title: t('community_top'),
                     list: rankingState.globalRanking,
-                    yStart: canvasHeight * 0.45,
+                    yStart: canvasHeight * GAME_OVER_GLOBAL_Y_RATIO,
                     isGlobal: true,
                     isLoadingRanking: rankingState.isLoadingRanking
                 }
@@ -168,7 +186,7 @@ function draw() {
             canvasWidth,
             title: t('all_time_top'),
             list: getRanking(STORAGE_KEY_ALL_TIME),
-            yStart: canvasHeight * 0.70
+            yStart: canvasHeight * GAME_OVER_ALL_TIME_Y_RATIO
         });
         return;
     }
@@ -179,11 +197,11 @@ function draw() {
         canvasHeight,
         t,
         score,
-        showDefaultScore: false,
+        hudRightText: `${t('time')}: ${Math.ceil(timeLeft)}s`,
         backgroundColor: '#0f0f0f',
         drawPlayfield: () => {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = PLAYFIELD_BORDER_COLOR;
+            ctx.lineWidth = PLAYFIELD_BORDER_LINE_WIDTH;
             ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
 
             const { padding, cardSize, gridYStart, cellStep } = getGridLayout();
@@ -195,32 +213,25 @@ function draw() {
                 const y = gridYStart + row * cellStep;
 
                 ctx.fillStyle = card.isMatched ? 'rgba(255, 255, 255, 0.1)' : (card.isFlipped ? '#fff' : '#e63946');
-                fillRoundRect(ctx, x, y, cardSize, cardSize, 8);
+                fillRoundRect(ctx, x, y, cardSize, cardSize, CARD_CORNER_RADIUS);
 
                 if (card.isFlipped || card.isMatched) {
-                    ctx.font = `${cardSize * 0.6}px Arial`;
+                    ctx.font = `${cardSize * CARD_EMOJI_FONT_SCALE}px Arial`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillStyle = '#000';
                     ctx.fillText(card.emoji, x + cardSize / 2, y + cardSize / 2);
                 }
             });
-
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 24px Inter, sans-serif';
-            ctx.textAlign = 'left';
-            ctx.fillText(`${t('score')}: ${score}`, 20, 45);
-            ctx.textAlign = 'right';
-            ctx.fillText(`${t('time')}: ${Math.ceil(timeLeft)}s`, canvasWidth - 20, 45);
         }
     });
 }
 
 function getGridLayout() {
-    const padding = 20;
+    const padding = GRID_PADDING;
     const cardSize = (canvasWidth - padding * (GRID_SIZE + 1)) / GRID_SIZE;
     const gridHeight = padding + (cardSize + padding) * GRID_SIZE;
-    const gridYStart = (canvasHeight - gridHeight) / 2 + 30;
+    const gridYStart = (canvasHeight - gridHeight) / 2 + GRID_Y_OFFSET;
     const cellStep = cardSize + padding;
     return { padding, cardSize, gridYStart, cellStep };
 }
@@ -239,7 +250,7 @@ function gameLoop() {
 
 // --- Events ---
 window.addEventListener('resize', () => {
-    setTimeout(applyResize, 100);
+    setTimeout(applyResize, RESIZE_DEBOUNCE_MS);
 });
 
 function handleCardClick(x, y) {
@@ -273,8 +284,8 @@ function handleCardClick(x, y) {
             if (selectedCards[0].emoji === selectedCards[1].emoji) {
                 selectedCards[0].isMatched = true;
                 selectedCards[1].isMatched = true;
-                score += 100;
-                timeLeft += 2; // Bonus time
+                score += SCORE_PER_MATCH;
+                timeLeft += BONUS_TIME_SECONDS; // Bonus time
                 selectedCards = [];
                 if (cards.every(c => c.isMatched)) {
                     initGrid(); // Reset grid if all matched
@@ -284,7 +295,7 @@ function handleCardClick(x, y) {
                     selectedCards[0].isFlipped = false;
                     selectedCards[1].isFlipped = false;
                     selectedCards = [];
-                }, 500);
+                }, MISMATCH_FLIP_BACK_DELAY_MS);
             }
         }
     }
@@ -298,11 +309,11 @@ bindCanvasPointerStart({
             setGameState: (next) => { gameState = next; },
             setScore: (next) => { score = next; },
             extraReset: () => {
-                timeLeft = 30;
+                timeLeft = INITIAL_TIME_SECONDS;
                 selectedCards = [];
                 initGrid();
             },
-            fetchRanking: () => fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState })
+            fetchRanking: () => fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: RANKING_TOP_N, state: rankingState })
         });
 
             return;
@@ -313,5 +324,5 @@ bindCanvasPointerStart({
 
 applyResize();
 initGrid();
-fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
+fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: RANKING_TOP_N, state: rankingState });
 gameLoop();

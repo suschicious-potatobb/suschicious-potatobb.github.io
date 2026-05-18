@@ -15,6 +15,28 @@ import {
     resetGame,
     endGame,
 } from "../../shared/Scripts/game-common.js";
+import {
+    GAME_OVER_ALL_TIME_Y_RATIO,
+    GAME_OVER_GLOBAL_Y_RATIO,
+    INITIAL_LIVES,
+    PLATE_BOTTOM_MARGIN_PX,
+    PLATE_CORNER_RADIUS,
+    PLATE_HEIGHT_PX,
+    PLATE_INITIAL_HEIGHT_PX,
+    PLATE_INITIAL_WIDTH_PX,
+    PLATE_WIDTH_RATIO,
+    RANKING_MAX_ENTRIES,
+    RANKING_TOP_N,
+    RESIZE_DEBOUNCE_MS,
+    SCORE_PER_CATCH,
+    START_SCREEN_ALL_TIME_Y_RATIO,
+    START_SCREEN_GLOBAL_Y_RATIO,
+    SUSHI_SIZE_RATIO,
+    SUSHI_SPAWN_PROBABILITY_PER_FRAME,
+    SUSHI_SPEED_BASE,
+    SUSHI_SPEED_RANDOM_RANGE,
+    SUSHI_SPEED_SCORE_DIVISOR,
+} from "./constants.js";
 
 // --- Firebase Configuration ---
 const firebaseConfig = { 
@@ -69,7 +91,7 @@ const t = langState.t;
 // --- Game Configuration ---
 let canvasWidth, canvasHeight;
 let score = 0;
-let lives = 3;
+let lives = INITIAL_LIVES;
 let gameState = 'start'; // 'start', 'playing', 'gameOver'
 const rankingState = { globalRanking: [], isLoadingRanking: false };
 
@@ -77,7 +99,7 @@ const STORAGE_KEY_ALL_TIME = 'sushicious_catch_all_time_rank';
 const GLOBAL_COLLECTION = 'rankings_catch';
 
 // --- Sushi & Plate ---
-let plate = { x: 0, y: 0, width: 80, height: 20 };
+let plate = { x: 0, y: 0, width: PLATE_INITIAL_WIDTH_PX, height: PLATE_INITIAL_HEIGHT_PX };
 let sushis = [];
 const sushiTypes = [
     { name: 'salmon', color: '#ff7f50', textColor: '#fff', label: '🍣' },
@@ -91,19 +113,19 @@ function applyResize() {
     canvasWidth = size.canvasWidth;
     canvasHeight = size.canvasHeight;
     
-    plate.width = canvasWidth * 0.25;
-    plate.height = 20;
-    plate.y = canvasHeight - plate.height - 40;
+    plate.width = canvasWidth * PLATE_WIDTH_RATIO;
+    plate.height = PLATE_HEIGHT_PX;
+    plate.y = canvasHeight - plate.height - PLATE_BOTTOM_MARGIN_PX;
 }
 
 function spawnSushi() {
     const type = sushiTypes[Math.floor(Math.random() * sushiTypes.length)];
-    const size = canvasWidth * 0.1;
+    const size = canvasWidth * SUSHI_SIZE_RATIO;
     sushis.push({
         x: Math.random() * (canvasWidth - size),
         y: -size,
         size: size,
-        speed: 2 + Math.random() * 2 + (score / 100),
+        speed: SUSHI_SPEED_BASE + Math.random() * SUSHI_SPEED_RANDOM_RANGE + (score / SUSHI_SPEED_SCORE_DIVISOR),
         type: type
     });
 }
@@ -111,7 +133,7 @@ function spawnSushi() {
 function update() {
     if (gameState !== 'playing') return;
 
-    if (Math.random() < 0.02) spawnSushi();
+    if (Math.random() < SUSHI_SPAWN_PROBABILITY_PER_FRAME) spawnSushi();
 
     for (let i = sushis.length - 1; i >= 0; i--) {
         const s = sushis[i];
@@ -120,7 +142,7 @@ function update() {
         // Check collision with plate
         if (s.y + s.size > plate.y && s.y < plate.y + plate.height &&
             s.x + s.size > plate.x && s.x < plate.x + plate.width) {
-            score += 10;
+            score += SCORE_PER_CATCH;
             sushis.splice(i, 1);
             continue;
         }
@@ -136,13 +158,13 @@ function update() {
                     onSaveScore: () => saveScoreToRankings({
                         score,
                         storageKeyAllTime: STORAGE_KEY_ALL_TIME,
-                        maxEntries: 3,
+                        maxEntries: RANKING_MAX_ENTRIES,
                         includeTimestamp: true,
                         global: {
                             db,
                             firebase: firebaseOps,
                             collectionName: GLOBAL_COLLECTION,
-                            topN: 3,
+                            topN: RANKING_TOP_N,
                             state: rankingState
                         }
                     })
@@ -164,14 +186,14 @@ function draw() {
                 {
                     title: t('community_top'),
                     list: rankingState.globalRanking,
-                    yStart: canvasHeight * 0.35,
+                    yStart: canvasHeight * START_SCREEN_GLOBAL_Y_RATIO,
                     isGlobal: true,
                     isLoadingRanking: rankingState.isLoadingRanking
                 },
                 {
                     title: t('all_time_top'),
                     list: getRanking(STORAGE_KEY_ALL_TIME),
-                    yStart: canvasHeight * 0.70
+                    yStart: canvasHeight * START_SCREEN_ALL_TIME_Y_RATIO
                 }
             ]
         });
@@ -189,14 +211,14 @@ function draw() {
                 {
                     title: t('community_top'),
                     list: rankingState.globalRanking,
-                    yStart: canvasHeight * 0.45,
+                    yStart: canvasHeight * GAME_OVER_GLOBAL_Y_RATIO,
                     isGlobal: true,
                     isLoadingRanking: rankingState.isLoadingRanking
                 },
                 {
                     title: t('all_time_top'),
                     list: getRanking(STORAGE_KEY_ALL_TIME),
-                    yStart: canvasHeight * 0.70
+                    yStart: canvasHeight * GAME_OVER_ALL_TIME_Y_RATIO
                 }
             ]
         });
@@ -209,11 +231,11 @@ function draw() {
         canvasHeight,
         t,
         score,
-        showDefaultScore: false,
+        hudRightText: `${t('lives')}: ${'❤️'.repeat(lives)}`,
         backgroundColor: '#0f0f0f',
         drawPlayfield: () => {
             ctx.fillStyle = '#f0f0f0';
-            fillRoundRect(ctx, plate.x, plate.y, plate.width, plate.height, 5);
+            fillRoundRect(ctx, plate.x, plate.y, plate.width, plate.height, PLATE_CORNER_RADIUS);
 
             sushis.forEach(s => {
                 ctx.font = `${s.size}px Arial`;
@@ -222,13 +244,6 @@ function draw() {
                 ctx.fillStyle = '#fff';
                 ctx.fillText(s.type.label, s.x + s.size / 2, s.y + s.size / 2);
             });
-
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 20px Inter, sans-serif';
-            ctx.textAlign = 'left';
-            ctx.fillText(`${t('score')}: ${score}`, 20, 40);
-            ctx.textAlign = 'right';
-            ctx.fillText(`${t('lives')}: ${'❤️'.repeat(lives)}`, canvasWidth - 20, 40);
         }
     });
 }
@@ -245,7 +260,7 @@ function gameLoop() {
 
 // --- Events ---
 window.addEventListener('resize', () => {
-    setTimeout(applyResize, 100);
+    setTimeout(applyResize, RESIZE_DEBOUNCE_MS);
 });
 
 let isInputActive = false;
@@ -265,10 +280,10 @@ canvas.addEventListener('mousedown', (e) => {
             setGameState: (next) => { gameState = next; },
             setScore: (next) => { score = next; },
             extraReset: () => {
-                lives = 3;
+                lives = INITIAL_LIVES;
                 sushis = [];
             },
-            fetchRanking: () => fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState })
+            fetchRanking: () => fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: RANKING_TOP_N, state: rankingState })
         });
     } else {
         handleInput(e);
@@ -307,5 +322,5 @@ window.addEventListener('touchend', () => {
 });
 
 applyResize();
-fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
+fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: RANKING_TOP_N, state: rankingState });
 gameLoop();
