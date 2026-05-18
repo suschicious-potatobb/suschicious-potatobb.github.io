@@ -222,6 +222,21 @@ export function createParentGameStateNotifier({
     };
 }
 
+export function resetGame({ setGameState, setScore, extraReset, fetchRanking } = {}) {
+    if (typeof setGameState === 'function') setGameState('start');
+    if (typeof setScore === 'function') setScore(0);
+    if (typeof extraReset === 'function') extraReset();
+    if (typeof fetchRanking === 'function') fetchRanking();
+}
+
+export function endGame({ getGameState, setGameState, onSaveScore } = {}) {
+    const state = typeof getGameState === 'function' ? getGameState() : undefined;
+    if (state === 'gameOver') return false;
+    if (typeof setGameState === 'function') setGameState('gameOver');
+    if (typeof onSaveScore === 'function') onSaveScore();
+    return true;
+}
+
 export function saveRanking({
     key,
     score,

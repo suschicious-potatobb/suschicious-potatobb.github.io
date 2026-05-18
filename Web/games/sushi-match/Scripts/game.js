@@ -13,6 +13,8 @@ import {
     bindCanvasPointerStart,
     createLangState,
     createParentGameStateNotifier,
+    resetGame,
+    endGame,
 } from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
@@ -83,15 +85,6 @@ let cards = [];
 let selectedCards = [];
 const sushiEmojis = ['🍣', '🦐', '🍳', '🐙', '🥢', '🍵', '🍶', '🍱'];
 
-function resetGame() {
-    gameState = 'start';
-    score = 0;
-    timeLeft = 30;
-    selectedCards = [];
-    initGrid();
-    fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
-}
-
 function applyResize() {
     const size = resizeCanvas({ canvas });
     canvasWidth = size.canvasWidth;
@@ -109,26 +102,6 @@ function initGrid() {
     }));
 }
 
-function endGame() {
-    if (gameState === 'gameOver') return;
-    gameState = 'gameOver';
-    saveScoreToRankings({
-        score,
-        storageKeyAllTime: STORAGE_KEY_ALL_TIME,
-        storageKeyDaily: STORAGE_KEY_DAILY,
-        dailyKey: STORAGE_KEY_DAILY,
-        maxEntries: 3,
-        includeTimestamp: true,
-        global: {
-            db,
-            firebase: firebaseOps,
-            collectionName: GLOBAL_COLLECTION,
-            topN: 3,
-            state: rankingState
-        }
-    });
-}
-
 function update() {
     if (gameState !== 'playing') return;
 
@@ -136,7 +109,25 @@ function update() {
         timeLeft -= 1/60;
     } else {
         timeLeft = 0;
-        endGame();
+        endGame({
+            getGameState: () => gameState,
+            setGameState: (next) => { gameState = next; },
+            onSaveScore: () => saveScoreToRankings({
+                score,
+                storageKeyAllTime: STORAGE_KEY_ALL_TIME,
+                storageKeyDaily: STORAGE_KEY_DAILY,
+                dailyKey: STORAGE_KEY_DAILY,
+                maxEntries: 3,
+                includeTimestamp: true,
+                global: {
+                    db,
+                    firebase: firebaseOps,
+                    collectionName: GLOBAL_COLLECTION,
+                    topN: 3,
+                    state: rankingState
+                }
+            })
+        });
     }
 }
 
@@ -303,7 +294,17 @@ bindCanvasPointerStart({
     canvas,
     onPoint: ({ x, y }) => {
         if (gameState === 'gameOver') {
-            resetGame();
+        resetGame({
+            setGameState: (next) => { gameState = next; },
+            setScore: (next) => { score = next; },
+            extraReset: () => {
+                timeLeft = 30;
+                selectedCards = [];
+                initGrid();
+            },
+            fetchRanking: () => fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState })
+        });
+
             return;
         }
         handleCardClick(x, y);

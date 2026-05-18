@@ -12,6 +12,8 @@ import {
     bindCanvasPointerStart,
     createLangState,
     createParentGameStateNotifier,
+    resetGame,
+    endGame,
 } from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
@@ -98,39 +100,6 @@ function startPlaying(now) {
     lastStateChange = now;
 }
 
-function toStart(now) {
-    gameState = 'start';
-    lastStateChange = now;
-    fetchGlobalRanking({
-        db,
-        firebase: firebaseOps,
-        collectionName: GLOBAL_COLLECTION,
-        topN: 3,
-        state: rankingState
-    });
-}
-
-function endGame(now) {
-    if (gameState === 'gameOver') return;
-    gameState = 'gameOver';
-    saveScoreToRankings({
-        score,
-        storageKeyAllTime: STORAGE_KEY_ALL_TIME,
-        storageKeyDaily: STORAGE_KEY_DAILY,
-        dailyKey: STORAGE_KEY_DAILY,
-        maxEntries: 3,
-        includeTimestamp: true,
-        global: {
-            db,
-            firebase: firebaseOps,
-            collectionName: GLOBAL_COLLECTION,
-            topN: 3,
-            state: rankingState
-        }
-    });
-    lastStateChange = now;
-}
-
 function update() {
     if (gameState !== 'playing') return;
     const elapsedSeconds = (performance.now() - playStartTimeMs) / 1000;
@@ -147,7 +116,26 @@ function update() {
         });
     }
     if (targets.some(t => t.y > canvasHeight + 50)) {
-        endGame(Date.now());
+        const changed = endGame({
+            getGameState: () => gameState,
+            setGameState: (next) => { gameState = next; },
+            onSaveScore: () => saveScoreToRankings({
+                score,
+                storageKeyAllTime: STORAGE_KEY_ALL_TIME,
+                storageKeyDaily: STORAGE_KEY_DAILY,
+                dailyKey: STORAGE_KEY_DAILY,
+                maxEntries: 3,
+                includeTimestamp: true,
+                global: {
+                    db,
+                    firebase: firebaseOps,
+                    collectionName: GLOBAL_COLLECTION,
+                    topN: 3,
+                    state: rankingState
+                }
+            })
+        });
+        if (changed) lastStateChange = Date.now;
     }
     if (targets.length > 50) {
         targets = targets.filter(t => t.y < canvasHeight + 100);
@@ -213,11 +201,10 @@ let lastStateChange = 0;
 
 function handleTap({ x, y } = {}) {
     const now = Date.now();
-    const canChangeState = (now - lastStateChange > 300);
     const tapX = x;
     const tapY = y;
 
-    if (gameState === 'start' && canChangeState) {
+    if (gameState === 'start') {
         startPlaying(now);
     } else if (gameState === 'playing') {
         for (let i = targets.length - 1; i >= 0; i--) {
@@ -230,8 +217,21 @@ function handleTap({ x, y } = {}) {
                 score++;
             }
         }
-    } else if (gameState === 'gameOver' && canChangeState) {
-        toStart(now);
+    } else if (gameState === 'gameOver') {
+        resetGame({
+            setGameState: (next) => { gameState = next; },
+            setScore: (next) => { score = next; },
+            extraReset: () => {
+                lastStateChange = now;
+            },
+            fetchRanking: () => fetchGlobalRanking({
+                db,
+                firebase: firebaseOps,
+                collectionName: GLOBAL_COLLECTION,
+                topN: 3,
+                state: rankingState
+            })
+        });
     }
 }
 

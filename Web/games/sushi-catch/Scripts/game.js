@@ -12,6 +12,8 @@ import {
     getCanvasPointFromEvent,
     createLangState,
     createParentGameStateNotifier,
+    resetGame,
+    endGame,
 } from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
@@ -84,32 +86,6 @@ const sushiTypes = [
     { name: 'egg', color: '#ffd700', textColor: '#000', label: '🍳' }
 ];
 
-function resetGame() {
-    gameState = 'start';
-    score = 0;
-    lives = 3;
-    sushis = [];
-    fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
-}
-
-function endGame() {
-    if (gameState === 'gameOver') return;
-    gameState = 'gameOver';
-    saveScoreToRankings({
-        score,
-        storageKeyAllTime: STORAGE_KEY_ALL_TIME,
-        maxEntries: 3,
-        includeTimestamp: true,
-        global: {
-            db,
-            firebase: firebaseOps,
-            collectionName: GLOBAL_COLLECTION,
-            topN: 3,
-            state: rankingState
-        }
-    });
-}
-
 function applyResize() {
     const size = resizeCanvas({ canvas });
     canvasWidth = size.canvasWidth;
@@ -154,7 +130,23 @@ function update() {
             lives--;
             sushis.splice(i, 1);
             if (lives <= 0) {
-                endGame();
+                endGame({
+                    getGameState: () => gameState,
+                    setGameState: (next) => { gameState = next; },
+                    onSaveScore: () => saveScoreToRankings({
+                        score,
+                        storageKeyAllTime: STORAGE_KEY_ALL_TIME,
+                        maxEntries: 3,
+                        includeTimestamp: true,
+                        global: {
+                            db,
+                            firebase: firebaseOps,
+                            collectionName: GLOBAL_COLLECTION,
+                            topN: 3,
+                            state: rankingState
+                        }
+                    })
+                });
             }
         }
     }
@@ -269,7 +261,15 @@ function handleInput(event) {
 canvas.addEventListener('mousedown', (e) => {
     isInputActive = true;
     if (gameState === 'gameOver') {
-        resetGame();
+        resetGame({
+            setGameState: (next) => { gameState = next; },
+            setScore: (next) => { score = next; },
+            extraReset: () => {
+                lives = 3;
+                sushis = [];
+            },
+            fetchRanking: () => fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState })
+        });
     } else {
         handleInput(e);
     }
