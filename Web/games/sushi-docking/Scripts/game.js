@@ -6,11 +6,11 @@ import {
     getRanking,
     saveRanking,
     drawStartScreen,
-    drawGameScreen,
     drawGameOverScreen,
     drawRankList,
     resizeCanvas,
 } from "../../shared/Scripts/game-common.js";
+import * as C from "./constants.js";
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -82,9 +82,6 @@ function createRankingStateAdapter(scene) {
 }
 
 (() => {
-    const GAME_WIDTH = 540;
-    const GAME_HEIGHT = 960;
-
     const canvas = document.getElementById('gameCanvas') || (() => {
         const c = document.createElement('canvas');
         c.id = 'gameCanvas';
@@ -95,12 +92,12 @@ function createRankingStateAdapter(scene) {
     let currentZoom = 1;
 
     function applyViewport(game) {
-        const { canvasWidth: width, canvasHeight: height } = resizeCanvas({ canvas, maxAspectRatio: 9 / 16 });
+        const { canvasWidth: width, canvasHeight: height } = resizeCanvas({ canvas, maxAspectRatio: C.MAX_ASPECT_RATIO });
         if (width <= 1 || height <= 1) {
             requestAnimationFrame(() => applyViewport(game));
             return;
         }
-        currentZoom = Math.min(width / GAME_WIDTH, height / GAME_HEIGHT);
+        currentZoom = Math.min(width / C.GAME_WIDTH, height / C.GAME_HEIGHT);
 
         canvas.style.width = width + 'px';
         canvas.style.height = height + 'px';
@@ -114,44 +111,18 @@ function createRankingStateAdapter(scene) {
             const cam = scene.cameras?.main;
             if (!cam) continue;
             cam.setZoom(currentZoom);
-            cam.centerOn(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+            cam.centerOn(C.GAME_WIDTH / 2, C.GAME_HEIGHT / 2);
         }
     }
 
-    const CONTAINER = {
-        x: 70,
-        y: 140,
-        width: 400,
-        height: 770
-    };
-
-    const CONTAINER_LEFT = CONTAINER.x;
-    const CONTAINER_RIGHT = CONTAINER.x + CONTAINER.width;
-    const CONTAINER_TOP = CONTAINER.y;
-    const CONTAINER_BOTTOM = CONTAINER.y + CONTAINER.height;
-    const DEADLINE_Y = CONTAINER_TOP + 70;
-    const CONTROLLED_FALL_SPEED = 4.3;
-
-    const TYPES = [
-        { id: 'shrimp', emoji: '🦐', radius: 26, weight: 389, score: 10 },
-        { id: 'puffer', emoji: '🐡', radius: 45, weight: 100, score: 25 },
-        { id: 'fish', emoji: '🐟', radius: 70, weight: 10, score: 60 },
-        { id: 'sprout', emoji: '🌱', radius: 26, weight: 389, score: 10 },
-        { id: 'ricePlant', emoji: '🌾', radius: 45, weight: 100, score: 25 },
-        { id: 'rice', emoji: '🍚', radius: 70, weight: 10, score: 60 },
-        { id: 'sushi', emoji: '🍣', radius: 100, weight: 2, score: 200 }
-    ];
+    const CONTAINER_LEFT = C.CONTAINER.x;
+    const CONTAINER_RIGHT = C.CONTAINER.x + C.CONTAINER.width;
+    const CONTAINER_TOP = C.CONTAINER.y;
+    const CONTAINER_BOTTOM = C.CONTAINER.y + C.CONTAINER.height;
+    const DEADLINE_Y = CONTAINER_TOP + C.DEADLINE_OFFSET_Y;
+    const TYPES = C.PIECE_TYPES;
 
     const TYPE_BY_ID = new Map(TYPES.map(t => [t.id, t]));
-
-    const SAME_MERGE_TO = {
-        shrimp: 'puffer',
-        puffer: 'fish',
-        sprout: 'ricePlant',
-        ricePlant: 'rice'
-    };
-
-    const SUSHI_BONUS = 500;
 
     function clamp(value, min, max) {
         return Math.max(min, Math.min(max, value));
@@ -177,7 +148,7 @@ function createRankingStateAdapter(scene) {
             this.restartQueued = false;
             this.scoreSubmitted = false;
             this.dangerMs = 0;
-            this.pointerWorldX = GAME_WIDTH / 2;
+            this.pointerWorldX = C.GAME_WIDTH / 2;
             this.controlled = null;
             this.nextTypeId = null;
             this.scoreText = null;
@@ -187,7 +158,7 @@ function createRankingStateAdapter(scene) {
             this.rankingsContainer = null;
             this.globalRanking = [];
             this.isLoadingGlobalRanking = false;
-            this.sparkTextureKey = 'spark-dot';
+            this.sparkTextureKey = C.SPARK_TEXTURE_KEY;
             this.started = false;
             this._onPointerMove = null;
             this._onPointerDown = null;
@@ -197,7 +168,7 @@ function createRankingStateAdapter(scene) {
         create() {
             this.cameras.main.setBackgroundColor('#0f0f0f');
             this.cameras.main.setZoom(currentZoom);
-            this.cameras.main.centerOn(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+            this.cameras.main.centerOn(C.GAME_WIDTH / 2, C.GAME_HEIGHT / 2);
             this.pieces = new Set();
             this.score = 0;
             this.gameOver = false;
@@ -216,9 +187,9 @@ function createRankingStateAdapter(scene) {
             if (this.matter?.world?.removeAll) {
                 this.matter.world.removeAll();
             }
-            this.matter.world.setGravity(0, 0.805);
+            this.matter.world.setGravity(0, C.MATTER_GRAVITY_Y);
             this.matter.world.resume();
-            this.matter.world.setBounds(0, 0, GAME_WIDTH, GAME_HEIGHT, 48, true, true, true, true);
+            this.matter.world.setBounds(0, 0, C.GAME_WIDTH, C.GAME_HEIGHT, C.MATTER_WORLD_BOUNDS_THICKNESS, true, true, true, true);
 
 
             this.createTextures();
@@ -302,8 +273,8 @@ function createRankingStateAdapter(scene) {
             }
 
             const canvas = document.createElement('canvas');
-            canvas.width = GAME_WIDTH;
-            canvas.height = GAME_HEIGHT;
+            canvas.width = C.GAME_WIDTH;
+            canvas.height = C.GAME_HEIGHT;
             const texture = this.textures.addCanvas(key, canvas);
             const ctx2d = canvas.getContext('2d');
 
@@ -316,8 +287,8 @@ function createRankingStateAdapter(scene) {
             const { ctx: ctx2d, texture } = this.getOrCreateOverlayTexture('ui-start');
             drawStartScreen({
                 ctx: ctx2d,
-                canvasWidth: GAME_WIDTH,
-                canvasHeight: GAME_HEIGHT,
+                canvasWidth: C.GAME_WIDTH,
+                canvasHeight: C.GAME_HEIGHT,
                 t,
                 globalRanking: this.globalRanking,
                 isLoadingRanking: this.isLoadingGlobalRanking,
@@ -325,23 +296,23 @@ function createRankingStateAdapter(scene) {
             drawRankList({
                 ctx: ctx2d,
                 t,
-                canvasWidth: GAME_WIDTH,
+                canvasWidth: C.GAME_WIDTH,
                 title: t('all_time_top'),
                 list: getRanking(STORAGE_KEY_ALL_TIME),
-                yStart: GAME_HEIGHT * 0.56,
+                yStart: C.GAME_HEIGHT * C.START_RANK_ALL_TIME_Y_RATIO,
             });
             drawRankList({
                 ctx: ctx2d,
                 t,
-                canvasWidth: GAME_WIDTH,
+                canvasWidth: C.GAME_WIDTH,
                 title: t('today_top'),
                 list: getRanking(STORAGE_KEY_DAILY),
-                yStart: GAME_HEIGHT * 0.70,
+                yStart: C.GAME_HEIGHT * C.START_RANK_DAILY_Y_RATIO,
             });
             texture.refresh();
 
             if (!this.startOverlay || !this.startOverlay.active) {
-                this.startOverlay = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'ui-start').setOrigin(0.5);
+                this.startOverlay = this.add.image(C.GAME_WIDTH / 2, C.GAME_HEIGHT / 2, 'ui-start').setOrigin(0.5);
                 this.startOverlay.setDepth(1000);
             }
         }
@@ -350,8 +321,8 @@ function createRankingStateAdapter(scene) {
             const { ctx: ctx2d, texture } = this.getOrCreateOverlayTexture('ui-gameover');
             drawGameOverScreen({
                 ctx: ctx2d,
-                canvasWidth: GAME_WIDTH,
-                canvasHeight: GAME_HEIGHT,
+                canvasWidth: C.GAME_WIDTH,
+                canvasHeight: C.GAME_HEIGHT,
                 t,
                 score: this.score,
                 storageKeyAllTime: STORAGE_KEY_ALL_TIME,
@@ -360,7 +331,7 @@ function createRankingStateAdapter(scene) {
             texture.refresh();
 
             if (!this.overlay || !this.overlay.active) {
-                this.overlay = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'ui-gameover').setOrigin(0.5);
+                this.overlay = this.add.image(C.GAME_WIDTH / 2, C.GAME_HEIGHT / 2, 'ui-gameover').setOrigin(0.5);
                 this.overlay.setDepth(1000);
             }
         }
@@ -383,57 +354,79 @@ function createRankingStateAdapter(scene) {
             if (this.textures.exists(this.sparkTextureKey)) return;
             const g = this.add.graphics();
             g.fillStyle(0xffffff, 1);
-            g.fillCircle(3, 3, 3);
-            g.generateTexture(this.sparkTextureKey, 6, 6);
+            g.fillCircle(C.SPARK_DOT_RADIUS, C.SPARK_DOT_RADIUS, C.SPARK_DOT_RADIUS);
+            g.generateTexture(this.sparkTextureKey, C.SPARK_TEXTURE_SIZE, C.SPARK_TEXTURE_SIZE);
             g.destroy();
         }
 
         drawBackdrop() {
             const g = this.add.graphics();
 
-            g.fillStyle(0x14110d, 1);
-            g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            g.fillStyle(C.BACKDROP_BG_COLOR, 1);
+            g.fillRect(0, 0, C.GAME_WIDTH, C.GAME_HEIGHT);
 
-            for (let y = 0; y < GAME_HEIGHT; y += 28) {
-                const alpha = 0.05 + ((y / 28) % 2) * 0.02;
-                g.lineStyle(2, 0x7a5230, alpha);
+            for (let y = 0; y < C.GAME_HEIGHT; y += C.BACKDROP_STRIPE_STEP_Y) {
+                const alpha =
+                    C.BACKDROP_STRIPE_ALPHA_BASE + ((y / C.BACKDROP_STRIPE_STEP_Y) % 2) * C.BACKDROP_STRIPE_ALPHA_ALT;
+                g.lineStyle(C.BACKDROP_STRIPE_LINE_WIDTH, C.BACKDROP_STRIPE_COLOR, alpha);
                 g.beginPath();
                 g.moveTo(0, y);
-                g.lineTo(GAME_WIDTH, y + 14);
+                g.lineTo(C.GAME_WIDTH, y + C.BACKDROP_STRIPE_SLOPE_OFFSET_Y);
                 g.strokePath();
             }
 
-            g.fillStyle(0xffffff, 0.04);
-            g.fillRoundedRect(CONTAINER.x - 14, CONTAINER.y - 14, CONTAINER.width + 28, CONTAINER.height + 28, 10);
+            g.fillStyle(0xffffff, C.BACKDROP_CONTAINER_OUTER_ALPHA);
+            g.fillRoundedRect(
+                C.CONTAINER.x - C.BACKDROP_CONTAINER_OUTER_PADDING,
+                C.CONTAINER.y - C.BACKDROP_CONTAINER_OUTER_PADDING,
+                C.CONTAINER.width + C.BACKDROP_CONTAINER_OUTER_PADDING * 2,
+                C.CONTAINER.height + C.BACKDROP_CONTAINER_OUTER_PADDING * 2,
+                C.BACKDROP_CONTAINER_OUTER_CORNER_RADIUS
+            );
 
-            g.fillStyle(0x000000, 0.10);
-            g.fillRoundedRect(CONTAINER.x, CONTAINER.y, CONTAINER.width, CONTAINER.height, 8);
+            g.fillStyle(0x000000, C.BACKDROP_CONTAINER_INNER_ALPHA);
+            g.fillRoundedRect(
+                C.CONTAINER.x,
+                C.CONTAINER.y,
+                C.CONTAINER.width,
+                C.CONTAINER.height,
+                C.BACKDROP_CONTAINER_INNER_CORNER_RADIUS
+            );
 
-            g.lineStyle(4, 0xd4af37, 0.65);
-            g.strokeRoundedRect(CONTAINER.x, CONTAINER.y, CONTAINER.width, CONTAINER.height, 8);
+            g.lineStyle(C.BACKDROP_CONTAINER_BORDER_WIDTH, C.BACKDROP_CONTAINER_BORDER_COLOR, C.BACKDROP_CONTAINER_BORDER_ALPHA);
+            g.strokeRoundedRect(
+                C.CONTAINER.x,
+                C.CONTAINER.y,
+                C.CONTAINER.width,
+                C.CONTAINER.height,
+                C.BACKDROP_CONTAINER_INNER_CORNER_RADIUS
+            );
 
-            const seaLeft = CONTAINER.x;
-            const seaRight = CONTAINER.x + CONTAINER.width;
-            const waveAmp = 7;
-            const waveStep = 18;
-            const waveLen = 44;
+            const seaLeft = C.CONTAINER.x;
+            const seaRight = C.CONTAINER.x + C.CONTAINER.width;
+            const waveAmp = C.SEA_WAVE_AMP;
+            const waveStep = C.SEA_WAVE_STEP;
+            const waveLen = C.SEA_WAVE_LEN;
 
-            g.fillStyle(0x1db954, 0.14);
+            g.fillStyle(C.SEA_FILL_COLOR, C.SEA_FILL_ALPHA);
             g.beginPath();
-            g.moveTo(seaLeft, DEADLINE_Y - waveAmp - 8);
+            g.moveTo(seaLeft, DEADLINE_Y - waveAmp - C.SEA_FILL_TOP_PAD);
             for (let x = seaLeft; x <= seaRight; x += waveStep) {
                 const y = DEADLINE_Y - waveAmp + Math.sin((x - seaLeft) / waveLen) * waveAmp;
                 g.lineTo(x, y);
             }
-            g.lineTo(seaRight, DEADLINE_Y + waveAmp + 12);
+            g.lineTo(seaRight, DEADLINE_Y + waveAmp + C.SEA_FILL_BOTTOM_PAD);
             for (let x = seaRight; x >= seaLeft; x -= waveStep) {
-                const y = DEADLINE_Y + waveAmp + Math.sin((x - seaLeft) / waveLen + 1.2) * (waveAmp * 0.7);
+                const y =
+                    DEADLINE_Y +
+                    waveAmp +
+                    Math.sin((x - seaLeft) / waveLen + C.SEA_BOTTOM_PHASE) * (waveAmp * C.SEA_BOTTOM_AMP_MULT);
                 g.lineTo(x, y);
             }
             g.closePath();
             g.fillPath();
 
-            g.lineStyle(7, 0x0c7a3a, 0.7);
+            g.lineStyle(C.SEA_DARK_LINE_WIDTH, C.SEA_DARK_LINE_COLOR, C.SEA_DARK_LINE_ALPHA);
             g.beginPath();
             for (let x = seaLeft; x <= seaRight; x += waveStep) {
                 const y = DEADLINE_Y + Math.sin((x - seaLeft) / waveLen) * waveAmp;
@@ -442,10 +435,13 @@ function createRankingStateAdapter(scene) {
             }
             g.strokePath();
 
-            g.lineStyle(3, 0x7fffb2, 0.45);
+            g.lineStyle(C.SEA_LIGHT_LINE_WIDTH, C.SEA_LIGHT_LINE_COLOR, C.SEA_LIGHT_LINE_ALPHA);
             g.beginPath();
             for (let x = seaLeft; x <= seaRight; x += waveStep) {
-                const y = DEADLINE_Y - 6 + Math.sin((x - seaLeft) / waveLen + 0.9) * (waveAmp * 0.65);
+                const y =
+                    DEADLINE_Y -
+                    C.SEA_LIGHT_LINE_OFFSET_Y +
+                    Math.sin((x - seaLeft) / waveLen + C.SEA_LIGHT_LINE_PHASE) * (waveAmp * C.SEA_LIGHT_AMP_MULT);
                 if (x === seaLeft) g.moveTo(x, y);
                 else g.lineTo(x, y);
             }
@@ -453,52 +449,52 @@ function createRankingStateAdapter(scene) {
 
             g.destroy();
 
-            const noriCount = 6;
+            const noriCount = C.NORI_COUNT;
             for (let i = 0; i < noriCount; i += 1) {
                 const x = seaLeft + ((i + 0.5) / noriCount) * (seaRight - seaLeft);
-                this.add.text(x, DEADLINE_Y - 28, '🌿', {
+                this.add.text(x, DEADLINE_Y - C.NORI_Y_OFFSET, '🌿', {
                     fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
-                    fontSize: '20px',
+                    fontSize: `${C.NORI_FONT_SIZE_PX}px`,
                     color: '#ffffff'
-                }).setOrigin(0.5).setAlpha(0.65);
+                }).setOrigin(0.5).setAlpha(C.NORI_ALPHA);
             }
         }
 
         createContainerBounds() {
-            const thickness = 44;
-            const sideOpts = { isStatic: true, restitution: 0.1, friction: 0.8, label: 'side' };
-            const floorOpts = { isStatic: true, restitution: 0.05, friction: 0.9, label: 'floor' };
+            const thickness = C.CONTAINER_WALL_THICKNESS;
+            const sideOpts = { isStatic: true, restitution: C.CONTAINER_SIDE_RESTITUTION, friction: C.CONTAINER_SIDE_FRICTION, label: 'side' };
+            const floorOpts = { isStatic: true, restitution: C.CONTAINER_FLOOR_RESTITUTION, friction: C.CONTAINER_FLOOR_FRICTION, label: 'floor' };
 
-            this.matter.add.rectangle(CONTAINER_LEFT - thickness / 2, (CONTAINER_TOP + CONTAINER_BOTTOM) / 2, thickness, CONTAINER.height + thickness, sideOpts);
-            this.matter.add.rectangle(CONTAINER_RIGHT + thickness / 2, (CONTAINER_TOP + CONTAINER_BOTTOM) / 2, thickness, CONTAINER.height + thickness, sideOpts);
-            this.matter.add.rectangle((CONTAINER_LEFT + CONTAINER_RIGHT) / 2, CONTAINER_BOTTOM + thickness / 2, CONTAINER.width + thickness, thickness, floorOpts);
+            this.matter.add.rectangle(CONTAINER_LEFT - thickness / 2, (CONTAINER_TOP + CONTAINER_BOTTOM) / 2, thickness, C.CONTAINER.height + thickness, sideOpts);
+            this.matter.add.rectangle(CONTAINER_RIGHT + thickness / 2, (CONTAINER_TOP + CONTAINER_BOTTOM) / 2, thickness, C.CONTAINER.height + thickness, sideOpts);
+            this.matter.add.rectangle((CONTAINER_LEFT + CONTAINER_RIGHT) / 2, CONTAINER_BOTTOM + thickness / 2, C.CONTAINER.width + thickness, thickness, floorOpts);
         }
 
         createUI() {
             const styleTitle = {
                 fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
                 fontStyle: '900',
-                fontSize: '28px',
+                fontSize: `${C.UI_TITLE_FONT_SIZE_PX}px`,
                 color: '#f0f0f0'
             };
 
             const styleSmall = {
                 fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
-                fontSize: '24px',
+                fontSize: `${C.UI_SMALL_FONT_SIZE_PX}px`,
                 color: '#f0f0f0'
             };
 
-            this.add.text(0, 10, 'SUSHI-Docking', styleTitle).setAlpha(0.95);
-            this.scoreText = this.add.text(0, 60, 'Score: 0', styleSmall).setAlpha(0.95);
+            this.add.text(0, C.UI_TITLE_Y, 'SUSHI-Docking', styleTitle).setAlpha(C.UI_TITLE_ALPHA);
+            this.scoreText = this.add.text(0, C.UI_SCORE_Y, 'Score: 0', styleSmall).setAlpha(C.UI_SCORE_ALPHA);
 
-            const nextLabel = this.add.text(GAME_WIDTH - 24, 40, 'Next', styleSmall).setOrigin(1, 0).setAlpha(0.85);
+            const nextLabel = this.add.text(C.GAME_WIDTH - C.UI_NEXT_MARGIN_X, C.UI_NEXT_LABEL_Y, 'Next', styleSmall).setOrigin(1, 0).setAlpha(C.UI_NEXT_LABEL_ALPHA);
             nextLabel.setColor('#d4af37');
 
-            this.nextText = this.add.text(GAME_WIDTH - 24, 70, '🦐', {
+            this.nextText = this.add.text(C.GAME_WIDTH - C.UI_NEXT_MARGIN_X, C.UI_NEXT_EMOJI_Y, '🦐', {
                 fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
-                fontSize: '42px',
+                fontSize: `${C.UI_NEXT_EMOJI_FONT_SIZE_PX}px`,
                 color: '#ffffff'
-            }).setOrigin(1, 0).setAlpha(0.95);
+            }).setOrigin(1, 0).setAlpha(C.UI_NEXT_EMOJI_ALPHA);
         }
 
         update(time, delta) {
@@ -516,7 +512,7 @@ function createRankingStateAdapter(scene) {
                 const targetX = clamp(this.pointerWorldX, CONTAINER_LEFT + radius, CONTAINER_RIGHT - radius);
                 const currentY = this.controlled.body.position.y;
                 this.controlled.setPosition(targetX, currentY);
-                this.controlled.setVelocity(0, CONTROLLED_FALL_SPEED);
+                this.controlled.setVelocity(0, C.CONTROLLED_FALL_SPEED);
                 this.controlled.setAngularVelocity(0);
             }
 
@@ -542,7 +538,7 @@ function createRankingStateAdapter(scene) {
                 this.dangerMs = 0;
             }
 
-            if (this.dangerMs >= 3000) {
+            if (this.dangerMs >= C.DANGER_DURATION_MS) {
                 this.endGame();
             }
         }
@@ -559,18 +555,18 @@ function createRankingStateAdapter(scene) {
             if (this.scoreSubmitted) return;
             this.scoreSubmitted = true;
 
-            saveRanking({ key: STORAGE_KEY_ALL_TIME, score: this.score, maxEntries: 3, includeTimestamp: true });
-            saveRanking({ key: STORAGE_KEY_DAILY, score: this.score, maxEntries: 3, dailyKey: STORAGE_KEY_DAILY, includeTimestamp: true });
+            saveRanking({ key: STORAGE_KEY_ALL_TIME, score: this.score, maxEntries: C.RANKING_MAX_ENTRIES, includeTimestamp: true });
+            saveRanking({ key: STORAGE_KEY_DAILY, score: this.score, maxEntries: C.RANKING_MAX_ENTRIES, dailyKey: STORAGE_KEY_DAILY, includeTimestamp: true });
 
             const state = this._rankingState || (this._rankingState = createRankingStateAdapter(this));
-            saveGlobalScore({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, score: this.score, topN: 3, state })
+            saveGlobalScore({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, score: this.score, topN: C.RANKING_TOP_N, state })
                 .then(() => this.refreshGlobalRanking())
                 .catch(() => {});
         }
 
         refreshGlobalRanking() {
             const state = this._rankingState || (this._rankingState = createRankingStateAdapter(this));
-            fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state })
+            fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: C.RANKING_TOP_N, state })
                 .then(() => {
                     if (!this.started && this.startOverlay) {
                         this.renderCommonStartOverlay();
@@ -591,22 +587,22 @@ function createRankingStateAdapter(scene) {
                 this.rankingsContainer = null;
             }
 
-            const baseY = GAME_HEIGHT * 0.68;
-            const columnGap = 180;
-            const leftX = GAME_WIDTH / 2 - columnGap;
-            const midX = GAME_WIDTH / 2;
-            const rightX = GAME_WIDTH / 2 + columnGap;
+            const baseY = C.GAME_HEIGHT * C.OVERLAY_BASE_Y_RATIO;
+            const columnGap = C.OVERLAY_COLUMN_GAP;
+            const leftX = C.GAME_WIDTH / 2 - columnGap;
+            const midX = C.GAME_WIDTH / 2;
+            const rightX = C.GAME_WIDTH / 2 + columnGap;
 
             const textStyleTitle = {
                 fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
-                fontSize: '16px',
+                fontSize: `${C.OVERLAY_TEXT_FONT_SIZE_PX}px`,
                 color: '#f0f0f0',
                 fontStyle: '700'
             };
 
             const textStyleRow = {
                 fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
-                fontSize: '16px',
+                fontSize: `${C.OVERLAY_TEXT_FONT_SIZE_PX}px`,
                 color: '#ffffff'
             };
 
@@ -620,14 +616,14 @@ function createRankingStateAdapter(scene) {
                 const title = this.add.text(x, baseY, titleText, textStyleTitle).setOrigin(0.5, 0);
                 const rows = [];
                 if (isLoading && (!items || items.length === 0)) {
-                    rows.push(this.add.text(x, baseY + 26, t('loading'), { ...textStyleRow, color: '#999999' }).setOrigin(0.5, 0));
+                    rows.push(this.add.text(x, baseY + C.OVERLAY_LOADING_Y_OFFSET, t('loading'), { ...textStyleRow, color: '#999999' }).setOrigin(0.5, 0));
                 } else if (!items || items.length === 0) {
-                    rows.push(this.add.text(x, baseY + 26, '-', { ...textStyleRow, color: '#999999' }).setOrigin(0.5, 0));
+                    rows.push(this.add.text(x, baseY + C.OVERLAY_LOADING_Y_OFFSET, '-', { ...textStyleRow, color: '#999999' }).setOrigin(0.5, 0));
                 } else {
-                    for (let i = 0; i < Math.min(3, items.length); i += 1) {
+                    for (let i = 0; i < Math.min(C.RANKING_TOP_N, items.length); i += 1) {
                         const scoreVal = items[i]?.score ?? items[i]?.score;
                         const line = `${i + 1}. ${scoreVal}`;
-                        rows.push(this.add.text(x, baseY + 26 + i * 22, line, textStyleRow).setOrigin(0.5, 0));
+                        rows.push(this.add.text(x, baseY + C.OVERLAY_LOADING_Y_OFFSET + i * C.OVERLAY_ROW_SPACING, line, textStyleRow).setOrigin(0.5, 0));
                     }
                 }
                 return [title, ...rows];
@@ -654,7 +650,7 @@ function createRankingStateAdapter(scene) {
             piece.setData('spawnQueued', true);
             piece.setIgnoreGravity(false);
 
-            this.time.delayedCall(300, () => {
+            this.time.delayedCall(C.CONTROL_RELEASE_DELAY_MS, () => {
                 if (this.gameOver) return;
                 if (!piece.active) return;
                 if (this.controlled !== piece) return;
@@ -671,16 +667,16 @@ function createRankingStateAdapter(scene) {
 
             const type = TYPE_BY_ID.get(typeId) || TYPES[0];
             const x = clamp(this.pointerWorldX, CONTAINER_LEFT + type.radius, CONTAINER_RIGHT - type.radius);
-            const y = CONTAINER_TOP + 40;
+            const y = CONTAINER_TOP + C.CONTROL_SPAWN_Y_OFFSET;
             const piece = this.createPiece(type.id, x, y);
             piece.setData('controllable', true);
             piece.setIgnoreGravity(true);
             this.controlled = piece;
 
-            this.time.delayedCall(650, () => {
+            this.time.delayedCall(C.CONTROL_AUTORELEASE_DELAY_MS, () => {
                 if (!piece.active) return;
                 if (!piece.getData('controllable')) return;
-                if (piece.body.position.y > CONTAINER_TOP + 220) {
+                if (piece.body.position.y > CONTAINER_TOP + C.CONTROL_AUTORELEASE_Y_OFFSET) {
                     this.releaseControlled(piece);
                 }
             });
@@ -688,7 +684,7 @@ function createRankingStateAdapter(scene) {
 
         createPiece(typeId, x, y) {
             const def = TYPE_BY_ID.get(typeId) || TYPES[0];
-            const fontSize = Math.max(18, Math.round(def.radius * 1.7));
+            const fontSize = Math.max(C.PIECE_FONT_MIN_SIZE_PX, Math.round(def.radius * C.PIECE_FONT_RADIUS_MULT));
             const obj = this.add.text(x, y, def.emoji, {
                 fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
                 fontSize: `${fontSize}px`,
@@ -698,10 +694,10 @@ function createRankingStateAdapter(scene) {
 
             this.matter.add.gameObject(obj, {
                 shape: { type: 'circle', radius: def.radius },
-                restitution: 0.15,
-                friction: 0.8,
-                frictionAir: 0.02,
-                density: 0.0012
+                restitution: C.PIECE_RESTITUTION,
+                friction: C.PIECE_FRICTION,
+                frictionAir: C.PIECE_FRICTION_AIR,
+                density: C.PIECE_DENSITY
             });
 
             obj.setData('kind', def.id);
@@ -725,7 +721,7 @@ function createRankingStateAdapter(scene) {
             if (a.getData('merging') || b.getData('merging')) return;
 
             if (kindA === kindB) {
-                const result = SAME_MERGE_TO[kindA];
+                const result = C.SAME_MERGE_TO[kindA];
                 if (result) {
                     this.mergePieces([a, b], result);
                     return;
@@ -755,23 +751,28 @@ function createRankingStateAdapter(scene) {
             const mx = (a.body.position.x + b.body.position.x) / 2;
             const my = (a.body.position.y + b.body.position.y) / 2;
 
-            this.spawnSparkles(mx, my, 18, 0xffffff);
+            this.spawnSparkles(mx, my, C.MERGE_SPARKLES_COUNT, 0xffffff);
 
             this.time.delayedCall(0, () => {
                 if (a.active) a.destroy();
                 if (b.active) b.destroy();
 
                 const newPiece = this.createPiece(resultTypeId, mx, my);
-                newPiece.setVelocity(Phaser.Math.Between(-2, 2), Phaser.Math.Between(-3, -1));
-                newPiece.setAngularVelocity(Phaser.Math.FloatBetween(-0.06, 0.06));
+                newPiece.setVelocity(
+                    Phaser.Math.Between(C.MERGE_NEW_X_VELOCITY_MIN, C.MERGE_NEW_X_VELOCITY_MAX),
+                    Phaser.Math.Between(C.MERGE_NEW_Y_VELOCITY_MIN, C.MERGE_NEW_Y_VELOCITY_MAX)
+                );
+                newPiece.setAngularVelocity(
+                    Phaser.Math.FloatBetween(C.MERGE_NEW_ANGULAR_VELOCITY_MIN, C.MERGE_NEW_ANGULAR_VELOCITY_MAX)
+                );
             });
 
             this.addScoreForType(resultTypeId);
-            this.playTone(660, 0.06, 0.04);
+            this.playTone(C.MERGE_TONE_FREQ, C.MERGE_TONE_DURATION_SEC, C.MERGE_TONE_GAIN);
 
             if (this.controlled && (a === this.controlled || b === this.controlled)) {
                 this.controlled = null;
-                this.time.delayedCall(220, () => this.spawnControlledPiece());
+                this.time.delayedCall(C.CONTROL_POST_MERGE_DELAY_MS, () => this.spawnControlledPiece());
             }
         }
 
@@ -787,47 +788,47 @@ function createRankingStateAdapter(scene) {
             const my = (a.body.position.y + b.body.position.y) / 2;
 
             this.spawnSmoke(mx, my);
-            this.spawnSparkles(mx, my, 42, 0xd4af37);
+            this.spawnSparkles(mx, my, C.SUSHI_SPARKLES_COUNT, 0xd4af37);
             this.applyPopImpulse(mx, my);
 
             const pop = this.add.text(mx, my, '💰', {
                 fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
-                fontSize: '150px',
+                fontSize: `${C.SUSHI_POP_EMOJI_FONT_SIZE_PX}px`,
                 color: '#ffffff'
             }).setOrigin(0.5);
-            pop.setScale(0.7);
-            pop.setAlpha(0.0);
+            pop.setScale(C.SUSHI_POP_EMOJI_SCALE);
+            pop.setAlpha(C.SUSHI_POP_EMOJI_ALPHA);
             this.tweens.add({
                 targets: pop,
-                scale: 1.25,
-                alpha: 1,
-                duration: 140,
+                scale: C.SUSHI_POP_TWEEN_SCALE,
+                alpha: C.SUSHI_POP_TWEEN_ALPHA,
+                duration: C.SUSHI_POP_TWEEN_DURATION_MS,
                 yoyo: true,
-                hold: 80,
+                hold: C.SUSHI_POP_TWEEN_HOLD_MS,
                 onComplete: () => pop.destroy()
             });
 
-            this.time.delayedCall(200, () => {
+            this.time.delayedCall(C.SUSHI_VANISH_DELAY_MS, () => {
                 if (a.active) a.destroy();
                 if (b.active) b.destroy();
             });
 
-            this.score += SUSHI_BONUS;
+            this.score += C.SUSHI_BONUS;
             if (this.scoreText && this.scoreText.active) {
                 this.scoreText.setText(`Score: ${this.score}`);
             }
-            this.playTone(988, 0.07, 0.07);
+            this.playTone(C.SUSHI_TONE_FREQ, C.SUSHI_TONE_DURATION_SEC, C.SUSHI_TONE_GAIN);
 
             if (this.controlled && (a === this.controlled || b === this.controlled)) {
                 this.controlled = null;
-                this.time.delayedCall(220, () => this.spawnControlledPiece());
+                this.time.delayedCall(C.CONTROL_POST_MERGE_DELAY_MS, () => this.spawnControlledPiece());
             }
         }
 
         applyPopImpulse(x, y) {
             const MatterBody = Phaser.Physics.Matter.Matter.Body;
-            const radius = 190;
-            const base = 0.020;
+            const radius = C.POP_IMPULSE_RADIUS;
+            const base = C.POP_IMPULSE_BASE_FORCE;
 
             for (const piece of this.pieces) {
                 if (!piece.active || !piece.body) continue;
@@ -836,7 +837,7 @@ function createRankingStateAdapter(scene) {
                 const dx = bx - x;
                 const dy = by - y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist <= 12 || dist > radius) continue;
+                if (dist <= C.POP_IMPULSE_IGNORE_DIST || dist > radius) continue;
                 const nx = dx / dist;
                 const ny = dy / dist;
                 const falloff = 1 - dist / radius;
@@ -850,33 +851,33 @@ function createRankingStateAdapter(scene) {
                 x,
                 y,
                 quantity: count,
-                lifespan: 520,
-                speed: { min: 40, max: 220 },
+                lifespan: C.SPARKLES_LIFESPAN_MS,
+                speed: { min: C.SPARKLES_SPEED_MIN, max: C.SPARKLES_SPEED_MAX },
                 angle: { min: 0, max: 360 },
-                scale: { start: 1.0, end: 0 },
-                alpha: { start: 0.9, end: 0 },
+                scale: { start: C.SPARKLES_SCALE_START, end: 0 },
+                alpha: { start: C.SPARKLES_ALPHA_START, end: 0 },
                 tint: color,
                 blendMode: 'ADD'
             });
 
-            this.time.delayedCall(520, () => particles.destroy());
+            this.time.delayedCall(C.SPARKLES_LIFESPAN_MS, () => particles.destroy());
         }
 
         spawnSmoke(x, y) {
             const particles = this.add.particles(0, 0, this.sparkTextureKey, {
                 x,
                 y,
-                quantity: 18,
-                lifespan: 720,
-                speed: { min: 30, max: 160 },
+                quantity: C.SMOKE_QUANTITY,
+                lifespan: C.SMOKE_LIFESPAN_MS,
+                speed: { min: C.SMOKE_SPEED_MIN, max: C.SMOKE_SPEED_MAX },
                 angle: { min: 0, max: 360 },
-                scale: { start: 3.0, end: 6.5 },
-                alpha: { start: 0.22, end: 0 },
+                scale: { start: C.SMOKE_SCALE_START, end: C.SMOKE_SCALE_END },
+                alpha: { start: C.SMOKE_ALPHA_START, end: 0 },
                 tint: 0xffffff,
                 blendMode: 'NORMAL'
             });
 
-            this.time.delayedCall(720, () => particles.destroy());
+            this.time.delayedCall(C.SMOKE_LIFESPAN_MS, () => particles.destroy());
         }
 
         addScoreForType(typeId) {
@@ -903,13 +904,13 @@ function createRankingStateAdapter(scene) {
             const g = ctx.createGain();
             osc.type = 'sine';
             osc.frequency.setValueAtTime(freq, now);
-            g.gain.setValueAtTime(0.0001, now);
-            g.gain.exponentialRampToValueAtTime(gain, now + 0.01);
-            g.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
+            g.gain.setValueAtTime(C.AUDIO_GAIN_FLOOR, now);
+            g.gain.exponentialRampToValueAtTime(gain, now + C.AUDIO_ATTACK_SEC);
+            g.gain.exponentialRampToValueAtTime(C.AUDIO_GAIN_FLOOR, now + durationSec);
             osc.connect(g);
             g.connect(ctx.destination);
             osc.start(now);
-            osc.stop(now + durationSec + 0.02);
+            osc.stop(now + durationSec + C.AUDIO_STOP_PAD_SEC);
         }
     }
 
@@ -924,7 +925,7 @@ function createRankingStateAdapter(scene) {
         }
     })();
 
-    const { canvasWidth: initialWidth, canvasHeight: initialHeight } = resizeCanvas({ canvas, maxAspectRatio: 9 / 16 });
+    const { canvasWidth: initialWidth, canvasHeight: initialHeight } = resizeCanvas({ canvas, maxAspectRatio: C.MAX_ASPECT_RATIO });
 
     const config = {
         type: preferredRenderType,
@@ -936,7 +937,7 @@ function createRankingStateAdapter(scene) {
         physics: {
             default: 'matter',
             matter: {
-                gravity: { y: 0.805 },
+                gravity: { y: C.MATTER_GRAVITY_Y },
                 debug: false
             }
         },
@@ -956,6 +957,6 @@ function createRankingStateAdapter(scene) {
         }
     }
     applyViewport(game);
-    setTimeout(() => applyViewport(game), 0);
-    window.addEventListener('resize', () => setTimeout(() => applyViewport(game), 100));
+    setTimeout(() => applyViewport(game), C.VIEWPORT_INITIAL_RESIZE_DELAY_MS);
+    window.addEventListener('resize', () => setTimeout(() => applyViewport(game), C.VIEWPORT_RESIZE_DEBOUNCE_MS));
 })();
