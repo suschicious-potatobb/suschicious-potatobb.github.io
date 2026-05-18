@@ -2,9 +2,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/fireba
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import {
     fetchGlobalRanking,
-    saveGlobalScore,
     getRanking,
-    saveRanking,
+    saveScoreToRankings,
     resizeCanvas,
     drawStartScreen,
     drawGameScreen,
@@ -12,7 +11,7 @@ import {
     fillRoundRect,
     getCanvasPointFromEvent,
     createLangState,
-    createParentGameStateNotifier
+    createParentGameStateNotifier,
 } from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
@@ -85,6 +84,32 @@ const sushiTypes = [
     { name: 'egg', color: '#ffd700', textColor: '#000', label: '🍳' }
 ];
 
+function resetGame() {
+    gameState = 'start';
+    score = 0;
+    lives = 3;
+    sushis = [];
+    fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
+}
+
+function endGame() {
+    if (gameState === 'gameOver') return;
+    gameState = 'gameOver';
+    saveScoreToRankings({
+        score,
+        storageKeyAllTime: STORAGE_KEY_ALL_TIME,
+        maxEntries: 3,
+        includeTimestamp: true,
+        global: {
+            db,
+            firebase: firebaseOps,
+            collectionName: GLOBAL_COLLECTION,
+            topN: 3,
+            state: rankingState
+        }
+    });
+}
+
 function applyResize() {
     const size = resizeCanvas({ canvas });
     canvasWidth = size.canvasWidth;
@@ -129,16 +154,7 @@ function update() {
             lives--;
             sushis.splice(i, 1);
             if (lives <= 0) {
-                gameState = 'gameOver';
-                saveRanking({
-                    key: STORAGE_KEY_ALL_TIME,
-                    score,
-                    maxEntries: 3,
-                    includeTimestamp: true,
-                    onSave: () => {
-                        saveGlobalScore({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, score, topN: 3, state: rankingState });
-                    }
-                });
+                endGame();
             }
         }
     }
@@ -253,11 +269,7 @@ function handleInput(event) {
 canvas.addEventListener('mousedown', (e) => {
     isInputActive = true;
     if (gameState === 'gameOver') {
-        gameState = 'start';
-        score = 0;
-        lives = 3;
-        sushis = [];
-        fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
+        resetGame();
     } else {
         handleInput(e);
     }
@@ -275,14 +287,10 @@ window.addEventListener('mouseup', () => {
 
 canvas.addEventListener('touchstart', (e) => {
     isInputActive = true;
+    if (e.cancelable) e.preventDefault();
     if (gameState === 'gameOver') {
-        gameState = 'start';
-        score = 0;
-        lives = 3;
-        sushis = [];
-        fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
+        resetGame();
     } else {
-        if (e.cancelable) e.preventDefault();
         handleInput(e);
     }
 }, { passive: false });

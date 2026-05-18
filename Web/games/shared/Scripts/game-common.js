@@ -1,4 +1,5 @@
 export async function fetchGlobalRanking({ db, firebase, collectionName, topN = 3, state } = {}) {
+    // Firestoreからグローバルランキングを取得する
     if (!db || !firebase || !collectionName) return [];
     if (state?.isLoadingRanking) return state?.globalRanking || [];
 
@@ -22,6 +23,7 @@ export async function fetchGlobalRanking({ db, firebase, collectionName, topN = 
 }
 
 export async function saveGlobalScore({ db, firebase, collectionName, score, topN = 3, state } = {}) {
+    // スコアをFirestoreへ保存し、必要ならランキングを再取得する
     if (!db || !firebase || !collectionName) return;
     if (typeof score !== 'number' || score <= 0) return;
 
@@ -40,11 +42,84 @@ export async function saveGlobalScore({ db, firebase, collectionName, score, top
 }
 
 export function getRanking(key) {
+    // localStorageからランキング配列を取得する
     const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : [];
 }
 
+function toTranslator(t) {
+    // 翻訳関数（t）が未指定でも安全に使える関数へ正規化する
+    return typeof t === 'function' ? t : (key) => key;
+}
+
+export function saveScoreToRankings({
+    // スコアをローカルランキング（任意で日次）へ保存し、必要ならグローバルランキングも更新する
+    score,
+    storageKeyAllTime,
+    storageKeyDaily,
+    dailyKey,
+    maxEntries = 3,
+    includeTimestamp = true,
+    global
+} = {}) {
+    const allTime = storageKeyAllTime ? saveRanking({
+        key: storageKeyAllTime,
+        score,
+        maxEntries,
+        includeTimestamp,
+        onSave: () => {
+            if (!global?.db || !global?.firebase || !global?.collectionName) return;
+            saveGlobalScore({
+                db: global.db,
+                firebase: global.firebase,
+                collectionName: global.collectionName,
+                score,
+                topN: global.topN ?? 3,
+                state: global.state
+            });
+        }
+    }) : [];
+
+    const daily = storageKeyDaily ? saveRanking({
+        key: storageKeyDaily,
+        score,
+        maxEntries,
+        dailyKey: dailyKey ?? storageKeyDaily,
+        includeTimestamp
+    }) : [];
+
+    return { allTime, daily };
+}
+
+function getRankColor(index) {
+    // 順位に応じた表示色を返す
+    if (index === 0) return '#ffd700';
+    if (index === 1) return '#e0e0e0';
+    if (index === 2) return '#cd7f32';
+    return '#ffffff';
+}
+
+function drawRankSections({ ctx, t, canvasWidth, sections } = {}) {
+    // 複数セクションのランキング描画をまとめて行う
+    if (!Array.isArray(sections) || sections.length === 0) return false;
+    for (const section of sections) {
+        if (!section) continue;
+        drawRankList({
+            ctx,
+            t,
+            canvasWidth,
+            title: section.title,
+            list: section.list || [],
+            yStart: section.yStart,
+            isGlobal: Boolean(section.isGlobal),
+            isLoadingRanking: Boolean(section.isLoadingRanking)
+        });
+    }
+    return true;
+}
+
 export function fillRoundRect(ctx, x, y, width, height, radius = 0) {
+    // 角丸矩形を塗りつぶし描画する（roundRect未対応環境でも動作）
     if (!ctx) return;
     const r = Math.max(0, Math.min(radius, Math.min(width, height) / 2));
     ctx.beginPath();
@@ -66,6 +141,7 @@ export function fillRoundRect(ctx, x, y, width, height, radius = 0) {
 }
 
 export function getCanvasPointFromEvent({ canvas, event } = {}) {
+    // マウス/タッチイベントからキャンバス座標（スケール反映済み）を取得する
     if (!canvas || !event) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     let clientX;
@@ -90,16 +166,37 @@ export function getCanvasPointFromEvent({ canvas, event } = {}) {
     };
 }
 
+export function bindCanvasPointerStart({ canvas, onPoint, preventDefaultTouch = true } = {}) {
+    // キャンバスの押下入力（mouse/touch）をまとめて購読し、座標付きでコールバックする
+    if (!canvas || typeof onPoint !== 'function') return () => {};
+
+    const handler = (event) => {
+        if (preventDefaultTouch && event?.type === 'touchstart' && event.cancelable) event.preventDefault();
+        const p = getCanvasPointFromEvent({ canvas, event });
+        onPoint({ x: p.x, y: p.y, event });
+    };
+
+    canvas.addEventListener('mousedown', handler, false);
+    canvas.addEventListener('touchstart', handler, { passive: false });
+
+    return () => {
+        canvas.removeEventListener('mousedown', handler, false);
+        canvas.removeEventListener('touchstart', handler, { passive: false });
+    };
+}
+
 export function createLangState({
     translations,
     storageKey = 'sushicious_lang',
     defaultLang = 'en',
     navigatorLang = (typeof navigator !== 'undefined' ? navigator.language : '')
 } = {}) {
+    // 言語状態（localStorage連携）と翻訳関数をまとめて提供する
     let currentLang = localStorage.getItem(storageKey) || (navigatorLang?.startsWith('ja') ? 'ja' : defaultLang);
 
     const t = (key) => translations?.[currentLang]?.[key] ?? translations?.[defaultLang]?.[key] ?? key;
     const sync = () => {
+        // localStorageの言語設定を取り込み、現在言語を更新する
         const portalLang = localStorage.getItem(storageKey);
         if (portalLang && portalLang !== currentLang) currentLang = portalLang;
         return currentLang;
@@ -114,8 +211,10 @@ export function createParentGameStateNotifier({
     targetOrigin = '*',
     getMessage = (gameState) => (gameState === 'playing' ? 'gameState:playing' : 'gameState:not_playing')
 } = {}) {
+    // ゲーム状態の変化を親フレームへpostMessageする通知関数を作る
     let lastMessage = '';
     return (gameState) => {
+        // 状態が変わった時だけ親へ通知する
         const message = getMessage(gameState);
         if (message === lastMessage) return;
         if (parent && typeof parent.postMessage === 'function') parent.postMessage(message, targetOrigin);
@@ -135,6 +234,7 @@ export function saveRanking({
     getToday = () => new Date().toLocaleDateString(),
     onSave
 } = {}) {
+    // スコアをlocalStorageランキングへ保存（必要なら日次リセット）する
     if (!key) return [];
     if (typeof score !== 'number') return getRankingFn(key);
 
@@ -162,6 +262,7 @@ export function saveRanking({
 }
 
 export function resizeCanvas({ canvas, maxAspectRatio = 9 / 16 } = {}) {
+    // 画面サイズに合わせてcanvasをリサイズする（最大アスペクト比を考慮）
     if (!canvas) return { canvasWidth: 0, canvasHeight: 0 };
     const viewWidth = document.documentElement.clientWidth;
     const viewHeight = document.documentElement.clientHeight;
@@ -182,35 +283,39 @@ export function resizeCanvas({ canvas, maxAspectRatio = 9 / 16 } = {}) {
 }
 
 export function drawRankList({ ctx, t, canvasWidth, title, list, yStart, isGlobal = false, isLoadingRanking = false } = {}) {
+    // ランキングのリスト表示（見出し＋上位N件）を描画する
     if (!ctx) return;
+    const safeList = Array.isArray(list) ? list : [];
+    const translate = toTranslator(t);
+
     ctx.fillStyle = '#f0f0f0';
     ctx.font = 'bold 20px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(title, canvasWidth / 2, yStart);
 
-    const translate = typeof t === 'function' ? t : (key) => key;
-
     ctx.font = 'bold 18px monospace';
-    if (isGlobal && isLoadingRanking && list.length === 0) {
+    if (isGlobal && isLoadingRanking && safeList.length === 0) {
         ctx.fillStyle = '#999';
         ctx.fillText(translate('loading'), canvasWidth / 2, yStart + 35);
         return;
     }
-    if (list.length === 0) {
+    if (safeList.length === 0) {
         ctx.fillStyle = '#666';
         ctx.fillText('-', canvasWidth / 2, yStart + 35);
         return;
     }
 
-    for (let i = 0; i < list.length; i++) {
-        const item = list[i];
-        ctx.fillStyle = i === 0 ? '#ffd700' : (i === 1 ? '#e0e0e0' : (i === 2 ? '#cd7f32' : '#ffffff'));
+    for (let i = 0; i < safeList.length; i++) {
+        const item = safeList[i];
+        ctx.fillStyle = getRankColor(i);
         ctx.fillText(`${i + 1}. ${item.score} ${translate('pts')}`, canvasWidth / 2, yStart + 35 + (i * 28));
     }
 }
 
 export function drawStartScreen({ ctx, canvasWidth, canvasHeight, t, globalRanking = [], isLoadingRanking = false, subtitleText, sections } = {}) {
+    // スタート画面（タイトル＋案内＋ランキング）を描画する
     if (!ctx) return;
+    const translate = toTranslator(t);
 
     ctx.fillStyle = '#0f0f0f';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
@@ -218,8 +323,6 @@ export function drawStartScreen({ ctx, canvasWidth, canvasHeight, t, globalRanki
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
     ctx.lineWidth = 2;
     ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
-
-    const translate = typeof t === 'function' ? t : (key) => key;
 
     ctx.fillStyle = '#ff3e3e';
     ctx.font = 'bold 44px sans-serif';
@@ -232,21 +335,7 @@ export function drawStartScreen({ ctx, canvasWidth, canvasHeight, t, globalRanki
         ctx.fillText(subtitleText, canvasWidth / 2, canvasHeight * 0.23);
     }
 
-    if (Array.isArray(sections) && sections.length > 0) {
-        for (const section of sections) {
-            if (!section) continue;
-            drawRankList({
-                ctx,
-                t: translate,
-                canvasWidth,
-                title: section.title,
-                list: section.list || [],
-                yStart: section.yStart,
-                isGlobal: Boolean(section.isGlobal),
-                isLoadingRanking: Boolean(section.isLoadingRanking)
-            });
-        }
-    } else {
+    if (!drawRankSections({ ctx, t: translate, canvasWidth, sections })) {
         drawRankList({
             ctx,
             t: translate,
@@ -265,8 +354,9 @@ export function drawStartScreen({ ctx, canvasWidth, canvasHeight, t, globalRanki
 }
 
 export function drawGameScreen({ ctx, canvasWidth, canvasHeight, t, score, drawPlayfield, showDefaultScore = true, backgroundColor = '#121212' } = {}) {
+    // プレイ中画面（背景＋プレイフィールド＋スコア）を描画する
     if (!ctx) return;
-    const translate = typeof t === 'function' ? t : (key) => key;
+    const translate = toTranslator(t);
 
     ctx.fillStyle = backgroundColor;
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
@@ -294,8 +384,9 @@ export function drawGameOverScreen({
     showScore = true,
     sections
 } = {}) {
+    // ゲームオーバー画面（スコア＋ランキング＋リトライ案内）を描画する
     if (!ctx) return;
-    const translate = typeof t === 'function' ? t : (key) => key;
+    const translate = toTranslator(t);
 
     ctx.fillStyle = 'rgba(15, 15, 15, 0.9)';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
@@ -313,21 +404,7 @@ export function drawGameOverScreen({
         ctx.fillText(translate('score').toUpperCase(), canvasWidth / 2, canvasHeight * 0.33);
     }
 
-    if (Array.isArray(sections) && sections.length > 0) {
-        for (const section of sections) {
-            if (!section) continue;
-            drawRankList({
-                ctx,
-                t: translate,
-                canvasWidth,
-                title: section.title,
-                list: section.list || [],
-                yStart: section.yStart,
-                isGlobal: Boolean(section.isGlobal),
-                isLoadingRanking: Boolean(section.isLoadingRanking)
-            });
-        }
-    } else {
+    if (!drawRankSections({ ctx, t: translate, canvasWidth, sections })) {
         const allTime = storageKeyAllTime ? getRankingFn(storageKeyAllTime) : [];
         const daily = storageKeyDaily ? getRankingFn(storageKeyDaily) : [];
 

@@ -2,18 +2,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/fireba
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import {
     fetchGlobalRanking,
-    saveGlobalScore,
     getRanking,
-    saveRanking,
-    fillRoundRect,
-    getCanvasPointFromEvent,
-    createLangState,
-    createParentGameStateNotifier,
+    saveScoreToRankings,
     resizeCanvas,
-    drawRankList,
     drawStartScreen,
     drawGameScreen,
     drawGameOverScreen,
+    drawRankList,
+    fillRoundRect,
+    bindCanvasPointerStart,
+    createLangState,
+    createParentGameStateNotifier,
 } from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
@@ -84,6 +83,15 @@ let cards = [];
 let selectedCards = [];
 const sushiEmojis = ['🍣', '🦐', '🍳', '🐙', '🥢', '🍵', '🍶', '🍱'];
 
+function resetGame() {
+    gameState = 'start';
+    score = 0;
+    timeLeft = 30;
+    selectedCards = [];
+    initGrid();
+    fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
+}
+
 function applyResize() {
     const size = resizeCanvas({ canvas });
     canvasWidth = size.canvasWidth;
@@ -101,6 +109,26 @@ function initGrid() {
     }));
 }
 
+function endGame() {
+    if (gameState === 'gameOver') return;
+    gameState = 'gameOver';
+    saveScoreToRankings({
+        score,
+        storageKeyAllTime: STORAGE_KEY_ALL_TIME,
+        storageKeyDaily: STORAGE_KEY_DAILY,
+        dailyKey: STORAGE_KEY_DAILY,
+        maxEntries: 3,
+        includeTimestamp: true,
+        global: {
+            db,
+            firebase: firebaseOps,
+            collectionName: GLOBAL_COLLECTION,
+            topN: 3,
+            state: rankingState
+        }
+    });
+}
+
 function update() {
     if (gameState !== 'playing') return;
 
@@ -108,23 +136,7 @@ function update() {
         timeLeft -= 1/60;
     } else {
         timeLeft = 0;
-        gameState = 'gameOver';
-        saveRanking({
-            key: STORAGE_KEY_ALL_TIME,
-            score,
-            maxEntries: 3,
-            includeTimestamp: true,
-            onSave: () => {
-                saveGlobalScore({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, score, topN: 3, state: rankingState });
-            }
-        });
-        saveRanking({
-            key: STORAGE_KEY_DAILY,
-            score,
-            maxEntries: 3,
-            dailyKey: STORAGE_KEY_DAILY,
-            includeTimestamp: true
-        });
+        endGame();
     }
 }
 
@@ -177,10 +189,8 @@ function draw() {
         t,
         score,
         showDefaultScore: false,
+        backgroundColor: '#0f0f0f',
         drawPlayfield: () => {
-            ctx.fillStyle = '#0f0f0f';
-            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
             ctx.lineWidth = 2;
             ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
@@ -289,32 +299,16 @@ function handleCardClick(x, y) {
     }
 }
 
-canvas.addEventListener('mousedown', (e) => {
-    if (gameState === 'gameOver') {
-        gameState = 'start';
-        score = 0;
-        timeLeft = 30;
-        initGrid();
-        fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
-    } else {
-        const p = getCanvasPointFromEvent({ canvas, event: e });
-        handleCardClick(p.x, p.y);
+bindCanvasPointerStart({
+    canvas,
+    onPoint: ({ x, y }) => {
+        if (gameState === 'gameOver') {
+            resetGame();
+            return;
+        }
+        handleCardClick(x, y);
     }
 });
-
-canvas.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    if (gameState === 'gameOver') {
-        gameState = 'start';
-        score = 0;
-        timeLeft = 30;
-        initGrid();
-        fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
-    } else {
-        const p = getCanvasPointFromEvent({ canvas, event: e });
-        handleCardClick(p.x, p.y);
-    }
-}, { passive: false });
 
 applyResize();
 initGrid();

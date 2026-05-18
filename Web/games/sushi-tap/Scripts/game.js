@@ -2,17 +2,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/fireba
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import {
     fetchGlobalRanking,
-    saveGlobalScore,
     getRanking,
-    saveRanking,
+    saveScoreToRankings,
     resizeCanvas,
     drawStartScreen,
     drawGameScreen,
     drawGameOverScreen,
     fillRoundRect,
-    getCanvasPointFromEvent,
+    bindCanvasPointerStart,
     createLangState,
-    createParentGameStateNotifier
+    createParentGameStateNotifier,
 } from "../../shared/Scripts/game-common.js";
 
 // --- Firebase Configuration ---
@@ -90,6 +89,48 @@ function applyResize() {
     canvasHeight = size.canvasHeight;
 }
 
+function startPlaying(now) {
+    gameState = 'playing';
+    score = 0;
+    targets = [];
+    targetSpeed = baseTargetSpeed;
+    playStartTimeMs = performance.now();
+    lastStateChange = now;
+}
+
+function toStart(now) {
+    gameState = 'start';
+    lastStateChange = now;
+    fetchGlobalRanking({
+        db,
+        firebase: firebaseOps,
+        collectionName: GLOBAL_COLLECTION,
+        topN: 3,
+        state: rankingState
+    });
+}
+
+function endGame(now) {
+    if (gameState === 'gameOver') return;
+    gameState = 'gameOver';
+    saveScoreToRankings({
+        score,
+        storageKeyAllTime: STORAGE_KEY_ALL_TIME,
+        storageKeyDaily: STORAGE_KEY_DAILY,
+        dailyKey: STORAGE_KEY_DAILY,
+        maxEntries: 3,
+        includeTimestamp: true,
+        global: {
+            db,
+            firebase: firebaseOps,
+            collectionName: GLOBAL_COLLECTION,
+            topN: 3,
+            state: rankingState
+        }
+    });
+    lastStateChange = now;
+}
+
 function update() {
     if (gameState !== 'playing') return;
     const elapsedSeconds = (performance.now() - playStartTimeMs) / 1000;
@@ -106,31 +147,7 @@ function update() {
         });
     }
     if (targets.some(t => t.y > canvasHeight + 50)) {
-        gameState = 'gameOver';
-        saveRanking({
-            key: STORAGE_KEY_ALL_TIME,
-            score,
-            maxEntries: 3,
-            includeTimestamp: true,
-            onSave: () => {
-                saveGlobalScore({
-                    db,
-                    firebase: firebaseOps,
-                    collectionName: GLOBAL_COLLECTION,
-                    score,
-                    topN: 3,
-                    state: rankingState
-                });
-            }
-        });
-        saveRanking({
-            key: STORAGE_KEY_DAILY,
-            score,
-            maxEntries: 3,
-            dailyKey: STORAGE_KEY_DAILY,
-            includeTimestamp: true
-        });
-        lastStateChange = Date.now();
+        endGame(Date.now());
     }
     if (targets.length > 50) {
         targets = targets.filter(t => t.y < canvasHeight + 100);
@@ -194,50 +211,37 @@ function gameLoop() {
 
 let lastStateChange = 0;
 
-function handleTap(event) {
+function handleTap({ x, y } = {}) {
     const now = Date.now();
     const canChangeState = (now - lastStateChange > 300);
-    if (event.type === 'touchstart' && event.cancelable) {
-        event.preventDefault();
-    }
-    const p = getCanvasPointFromEvent({ canvas, event });
-    const tapX = p.x;
-    const tapY = p.y;
+    const tapX = x;
+    const tapY = y;
 
     if (gameState === 'start' && canChangeState) {
-        gameState = 'playing';
-        score = 0;
-        targets = [];
-        targetSpeed = baseTargetSpeed;
-        playStartTimeMs = performance.now();
-        lastStateChange = now;
+        startPlaying(now);
     } else if (gameState === 'playing') {
-        targets.forEach((target, index) => {
-            const distance = Math.sqrt(Math.pow(tapX - target.x, 2) + Math.pow(tapY - target.y, 2));
-            if (distance < target.size / 2) {
-                targets.splice(index, 1);
+        for (let i = targets.length - 1; i >= 0; i--) {
+            const target = targets[i];
+            const dx = tapX - target.x;
+            const dy = tapY - target.y;
+            const r = target.size / 2;
+            if (dx * dx + dy * dy < r * r) {
+                targets.splice(i, 1);
                 score++;
             }
-        });
+        }
     } else if (gameState === 'gameOver' && canChangeState) {
-        gameState = 'start';
-        lastStateChange = now;
-        // Fetch latest rankings when returning to start screen
-        fetchGlobalRanking({
-            db,
-            firebase: firebaseOps,
-            collectionName: GLOBAL_COLLECTION,
-            topN: 3,
-            state: rankingState
-        });
+        toStart(now);
     }
 }
 
 window.addEventListener('resize', () => {
     setTimeout(applyResize, 100);
 }, false);
-canvas.addEventListener('touchstart', handleTap, { passive: false });
-canvas.addEventListener('mousedown', handleTap, false);
+bindCanvasPointerStart({
+    canvas,
+    onPoint: ({ x, y }) => handleTap({ x, y })
+});
 
 applyResize();
 fetchGlobalRanking({ db, firebase: firebaseOps, collectionName: GLOBAL_COLLECTION, topN: 3, state: rankingState });
