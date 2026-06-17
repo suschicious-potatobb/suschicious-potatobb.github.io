@@ -152,6 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const games = [
+        /*
         {
             id: 'special-game',
             sceneUrl: 'games/special-game/Scenes/',
@@ -163,6 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ruleKeys: ['special_game_rule_1', 'special_game_rule_2', 'special_game_rule_3'],
             tipsKey: 'special_game_tips'
         },
+        */
         {
             id: 'sushi-tap',
             sceneUrl: 'games/sushi-tap/Scenes/',
